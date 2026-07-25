@@ -4,7 +4,9 @@ pub use appearance::{
     APPEARANCE_MODE_AUTO, APPEARANCE_MODE_DARK, APPEARANCE_MODE_LIGHT, default_appearance_mode,
     normalize_appearance_arg,
 };
-use appearance::{BarStyle, DARK_BAR_STYLE, bar_style_for_appearance, runtime_bar_appearance};
+use appearance::{
+    BarStyle, DARK_BAR_STYLE, LIGHT_BAR_STYLE, bar_style_for_appearance, runtime_bar_appearance,
+};
 use serde::{Deserialize, Serialize};
 
 pub const WIDGET_EDITOR: &str = "editor";
@@ -214,6 +216,7 @@ const RUNTIME_ZJSTATUS_PLUGIN_URL_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_ZJSTATU
 const RUNTIME_WIDGET_TRAY_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_WIDGET_TRAY__";
 const RUNTIME_CUSTOM_TEXT_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_CUSTOM_TEXT__";
 const RUNTIME_APPEARANCE_MODE_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_APPEARANCE_MODE__";
+const RUNTIME_HOST_THEME_PALETTES_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_HOST_THEME_PALETTES__";
 const RUNTIME_TAB_LABEL_MODE_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_TAB_LABEL_MODE__";
 const RUNTIME_TAB_LABELS_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_TAB_LABELS__";
 const RUNTIME_TAB_RENAME_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_TAB_RENAME__";
@@ -1547,6 +1550,114 @@ fn escape_kdl_string(value: &str) -> String {
         .replace('\t', "\\t")
 }
 
+fn runtime_host_theme_fields(
+    config: &YazelixRuntimeBarConfig,
+    style: &BarStyle,
+    chrome: WidgetChrome,
+) -> Result<Vec<(&'static str, String)>, BarRenderError> {
+    let segments = render_zjstatus_bar_segments_with_style(
+        &BarRenderRequest {
+            widget_tray: config.widget_tray.clone(),
+            editor_label: config.editor_label.clone(),
+            shell_label: config.shell_label.clone(),
+            terminal_label: config.terminal_label.clone(),
+            custom_text: config.custom_text.clone(),
+        },
+        style,
+        chrome,
+    )?;
+    let tabs = render_zjstatus_tab_label_formats_with_style(&config.tab_label_mode, style)?;
+    let has_content_before_version =
+        !config.widget_tray.is_empty() || !config.custom_text.trim().is_empty();
+    Ok(vec![
+        (
+            "format_right",
+            format!(
+                "{}{}{}",
+                segments.widget_tray_segment,
+                segments.custom_text_segment,
+                render_runtime_version_segment_with_style(
+                    style,
+                    chrome,
+                    !has_content_before_version,
+                )
+            ),
+        ),
+        ("tab_normal", kdl_assignment_value(&tabs.tab_normal)),
+        (
+            "tab_normal_fullscreen",
+            kdl_assignment_value(&tabs.tab_normal_fullscreen),
+        ),
+        (
+            "tab_normal_sync",
+            kdl_assignment_value(&tabs.tab_normal_sync),
+        ),
+        (
+            "tab_normal_bell",
+            kdl_assignment_value(&tabs.tab_normal_bell),
+        ),
+        (
+            "tab_normal_flashing_bell",
+            kdl_assignment_value(&tabs.tab_normal_flashing_bell),
+        ),
+        ("tab_active", kdl_assignment_value(&tabs.tab_active)),
+        (
+            "tab_active_fullscreen",
+            kdl_assignment_value(&tabs.tab_active_fullscreen),
+        ),
+        (
+            "tab_active_sync",
+            kdl_assignment_value(&tabs.tab_active_sync),
+        ),
+        ("tab_rename", kdl_assignment_value(&tabs.tab_rename)),
+        (
+            "tab_truncate_start_format",
+            format!("{}< +{{count}} ... ", style.tab_truncate),
+        ),
+        (
+            "tab_truncate_end_format",
+            format!("{}... +{{count}} > ", style.tab_truncate),
+        ),
+        ("datetime", format!("{} {{format}} ", style.datetime)),
+        (
+            "pipe_workspace_format",
+            runtime_widget_format(
+                style.workspace,
+                chrome,
+                style,
+                widget_first_position(&config.widget_tray, WIDGET_WORKSPACE),
+            ),
+        ),
+    ])
+}
+
+fn kdl_assignment_value(assignment: &str) -> String {
+    let start = assignment
+        .find('"')
+        .expect("generated KDL assignment has an opening quote")
+        + 1;
+    assignment[start..assignment.len() - 1].to_string()
+}
+
+fn render_runtime_host_theme_palettes(
+    config: &YazelixRuntimeBarConfig,
+    chrome: WidgetChrome,
+) -> Result<String, BarRenderError> {
+    let mut lines = Vec::new();
+    for (mode, style) in [
+        (APPEARANCE_MODE_DARK, &DARK_BAR_STYLE),
+        (APPEARANCE_MODE_LIGHT, &LIGHT_BAR_STYLE),
+    ] {
+        for (key, value) in runtime_host_theme_fields(config, style, chrome)? {
+            lines.push(format!(
+                "    host_theme_{mode}_{key} \"{}\"",
+                escape_kdl_string(&value)
+            ));
+        }
+    }
+    Ok(lines.join("\n"))
+}
+
 pub fn render_zjstatus_bar_segments(
     request: &BarRenderRequest,
 ) -> Result<BarRenderData, BarRenderError> {
@@ -1619,6 +1730,10 @@ pub fn render_yazelix_runtime_plugin_block(
         (
             RUNTIME_APPEARANCE_MODE_PLACEHOLDER,
             escape_kdl_string(appearance_mode),
+        ),
+        (
+            RUNTIME_HOST_THEME_PALETTES_PLACEHOLDER,
+            render_runtime_host_theme_palettes(config, chrome)?,
         ),
         (
             RUNTIME_TAB_LABEL_MODE_PLACEHOLDER,
@@ -3804,6 +3919,8 @@ mod tests {
 
         assert!(YAZELIX_RUNTIME_BAR_TEMPLATE.contains("pipe_workspace_format"));
         assert!(rendered.contains(r#"plugin location="file:/runtime/share/zjstatus.wasm" {"#));
+        assert!(rendered.contains(r#"host_theme_mode "dark""#));
+        assert!(rendered.contains(r##"host_theme_light_tab_normal "#[fg=#5c5f77] [{index}] ""##));
         assert!(rendered.contains(
             "format_right  \" #[fg=#ff0088,bold]{session} #[fg=#6c7086,bold]• #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]YZX {command_version} \" // {datetime}"
         ));
@@ -3889,6 +4006,8 @@ mod tests {
         config.appearance_mode = "light".to_string();
         let rendered = render_yazelix_runtime_plugin_block(&config).unwrap();
 
+        assert!(rendered.contains(r#"host_theme_mode "light""#));
+        assert!(rendered.contains(r##"host_theme_dark_tab_normal "#[fg=#ffff00] [{index}] ""##));
         assert!(rendered.contains(
             "format_right  \" #[fg=#7c3f97,bold]{session} #[fg=#8c8fa1,bold]• #[fg=#2f7d32,bold] hx{pipe_workspace} #[fg=#8c8fa1,bold]• #[fg=#a24f00]{command_cpu} #[fg=#8c8fa1,bold]• #[fg=#9a5a00,bold][demo] #[fg=#8c8fa1,bold]• #[fg=#1e66f5,bold]YZX {command_version} \" // {datetime}"
         ));
@@ -3909,7 +4028,6 @@ mod tests {
         assert!(rendered.contains(r##"command_codex_usage_rendermode "raw""##));
         assert!(rendered.contains(r##"command_cpu_format "{stdout}""##));
         assert!(!rendered.contains("command_cursor"));
-        assert!(!rendered.contains("#00ff88"));
     }
 
     // Defends: vanilla users keep a simple standalone preset and do not inherit integrated Yazelix runtime placeholders.

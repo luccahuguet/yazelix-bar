@@ -107,7 +107,7 @@ pub(crate) const DARK_BAR_STYLE: BarStyle = BarStyle {
     system_usage: "#[fg=#ff6600]",
 };
 
-const LIGHT_BAR_STYLE: BarStyle = BarStyle {
+pub(crate) const LIGHT_BAR_STYLE: BarStyle = BarStyle {
     session: "#[fg=#7c3f97,bold]",
     widget: "#[fg=#2f7d32,bold]",
     custom_text: "#[fg=#9a5a00,bold]",

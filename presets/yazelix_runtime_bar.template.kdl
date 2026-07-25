@@ -7,6 +7,8 @@ plugin location="__YAZELIX_RUNTIME_ZJSTATUS_PLUGIN_URL__" {
     format_space  ""
 
     border_enabled  "false"
+    host_theme_mode "__YAZELIX_RUNTIME_APPEARANCE_MODE__"
+__YAZELIX_RUNTIME_HOST_THEME_PALETTES__
 
 __YAZELIX_RUNTIME_TAB_LABELS__
     tab_separator ""
