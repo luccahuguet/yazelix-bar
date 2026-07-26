@@ -213,13 +213,9 @@ const YAZELIX_RUNTIME_BAR_TEMPLATE: &str =
     include_str!("../presets/yazelix_runtime_bar.template.kdl");
 const RUNTIME_PLACEHOLDER_PREFIX: &str = "__YAZELIX_RUNTIME_";
 const RUNTIME_ZJSTATUS_PLUGIN_URL_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_ZJSTATUS_PLUGIN_URL__";
-const RUNTIME_WIDGET_TRAY_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_WIDGET_TRAY__";
-const RUNTIME_CUSTOM_TEXT_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_CUSTOM_TEXT__";
+const RUNTIME_ACTIVE_THEME_FIELDS_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_ACTIVE_THEME_FIELDS__";
 const RUNTIME_APPEARANCE_MODE_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_APPEARANCE_MODE__";
 const RUNTIME_HOST_THEME_PALETTES_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_HOST_THEME_PALETTES__";
-const RUNTIME_TAB_LABEL_MODE_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_TAB_LABEL_MODE__";
-const RUNTIME_TAB_LABELS_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_TAB_LABELS__";
-const RUNTIME_TAB_RENAME_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_TAB_RENAME__";
 const RUNTIME_FLOATING_INDICATOR_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_FLOATING_INDICATOR__";
 const RUNTIME_NU_BIN_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_NU_BIN__";
 const RUNTIME_YZX_CONTROL_BIN_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_YZX_CONTROL_BIN__";
@@ -241,7 +237,6 @@ const RUNTIME_OPENCODE_GO_USAGE_WIDGET_ARGS_PLACEHOLDER: &str =
     "__YAZELIX_RUNTIME_OPENCODE_GO_USAGE_WIDGET_ARGS__";
 const RUNTIME_CPU_WIDGET_ARGS_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_CPU_WIDGET_ARGS__";
 const RUNTIME_RAM_WIDGET_ARGS_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_RAM_WIDGET_ARGS__";
-const RUNTIME_PIPE_WORKSPACE_FORMAT_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_PIPE_WORKSPACE_FORMAT__";
 const RUNTIME_COMMAND_CLAUDE_USAGE_FORMAT_PLACEHOLDER: &str =
     "__YAZELIX_RUNTIME_COMMAND_CLAUDE_USAGE_FORMAT__";
 const RUNTIME_COMMAND_CODEX_USAGE_FORMAT_PLACEHOLDER: &str =
@@ -250,7 +245,6 @@ const RUNTIME_COMMAND_OPENCODE_GO_USAGE_FORMAT_PLACEHOLDER: &str =
     "__YAZELIX_RUNTIME_COMMAND_OPENCODE_GO_USAGE_FORMAT__";
 const RUNTIME_COMMAND_CPU_FORMAT_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_COMMAND_CPU_FORMAT__";
 const RUNTIME_COMMAND_RAM_FORMAT_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_COMMAND_RAM_FORMAT__";
-const RUNTIME_VERSION_SEGMENT_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_VERSION_SEGMENT__";
 const SYSTEM_USAGE_CACHE_SCHEMA_VERSION: u64 = 1;
 const SYSTEM_USAGE_CACHE_MAX_AGE_MILLIS: u64 = 5_000;
 const SYSTEM_USAGE_CACHE_REFRESH_GRACE_MILLIS: u64 = 30_000;
@@ -1550,7 +1544,7 @@ fn escape_kdl_string(value: &str) -> String {
         .replace('\t', "\\t")
 }
 
-fn runtime_host_theme_fields(
+fn runtime_theme_fields(
     config: &YazelixRuntimeBarConfig,
     style: &BarStyle,
     chrome: WidgetChrome,
@@ -1639,23 +1633,12 @@ fn kdl_assignment_value(assignment: &str) -> String {
     assignment[start..assignment.len() - 1].to_string()
 }
 
-fn render_runtime_host_theme_palettes(
-    config: &YazelixRuntimeBarConfig,
-    chrome: WidgetChrome,
-) -> Result<String, BarRenderError> {
-    let mut lines = Vec::new();
-    for (mode, style) in [
-        (APPEARANCE_MODE_DARK, &DARK_BAR_STYLE),
-        (APPEARANCE_MODE_LIGHT, &LIGHT_BAR_STYLE),
-    ] {
-        for (key, value) in runtime_host_theme_fields(config, style, chrome)? {
-            lines.push(format!(
-                "    host_theme_{mode}_{key} \"{}\"",
-                escape_kdl_string(&value)
-            ));
-        }
-    }
-    Ok(lines.join("\n"))
+fn render_runtime_theme_fields(prefix: &str, fields: &[(&'static str, String)]) -> String {
+    fields
+        .iter()
+        .map(|(key, value)| format!("    {prefix}{key} \"{}\"", escape_kdl_string(value)))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub fn render_zjstatus_bar_segments(
@@ -1688,65 +1671,35 @@ fn render_zjstatus_bar_segments_with_style(
 pub fn render_yazelix_runtime_plugin_block(
     config: &YazelixRuntimeBarConfig,
 ) -> Result<String, BarRenderError> {
-    let style = bar_style_for_appearance(&config.appearance_mode);
     let appearance_mode = runtime_bar_appearance(&config.appearance_mode);
     let chrome = WidgetChrome::parse(&config.widget_frame, &config.widget_separator)?;
-    let bar_segments = render_zjstatus_bar_segments_with_style(
-        &BarRenderRequest {
-            widget_tray: config.widget_tray.clone(),
-            editor_label: config.editor_label.clone(),
-            shell_label: config.shell_label.clone(),
-            terminal_label: config.terminal_label.clone(),
-            custom_text: config.custom_text.clone(),
-        },
-        style,
-        chrome,
-    )?;
-    let tab_labels = render_zjstatus_tab_label_formats_with_style(&config.tab_label_mode, style)?;
-    let widget_args = || runtime_command_widget_args(chrome);
-    let widget_format = |style_prefix: &str, widget| {
-        runtime_widget_format(
-            style_prefix,
-            chrome,
-            style,
-            widget_first_position(&config.widget_tray, widget),
-        )
+    let dark_theme = runtime_theme_fields(config, &DARK_BAR_STYLE, chrome)?;
+    let light_theme = runtime_theme_fields(config, &LIGHT_BAR_STYLE, chrome)?;
+    let active_theme = if appearance_mode == APPEARANCE_MODE_LIGHT {
+        &light_theme
+    } else {
+        &dark_theme
     };
-    let has_content_before_version =
-        !config.widget_tray.is_empty() || !config.custom_text.trim().is_empty();
+    let widget_args = || runtime_command_widget_args(chrome);
+    let host_theme_palettes = [
+        render_runtime_theme_fields("host_theme_dark_", &dark_theme),
+        render_runtime_theme_fields("host_theme_light_", &light_theme),
+    ]
+    .join("\n");
     let replacements = [
         (
             RUNTIME_ZJSTATUS_PLUGIN_URL_PLACEHOLDER,
             escape_kdl_string(&config.zjstatus_plugin_url),
         ),
         (
-            RUNTIME_WIDGET_TRAY_PLACEHOLDER,
-            bar_segments.widget_tray_segment,
-        ),
-        (
-            RUNTIME_CUSTOM_TEXT_PLACEHOLDER,
-            bar_segments.custom_text_segment,
+            RUNTIME_ACTIVE_THEME_FIELDS_PLACEHOLDER,
+            render_runtime_theme_fields("", active_theme),
         ),
         (
             RUNTIME_APPEARANCE_MODE_PLACEHOLDER,
             escape_kdl_string(appearance_mode),
         ),
-        (
-            RUNTIME_HOST_THEME_PALETTES_PLACEHOLDER,
-            render_runtime_host_theme_palettes(config, chrome)?,
-        ),
-        (
-            RUNTIME_TAB_LABEL_MODE_PLACEHOLDER,
-            escape_kdl_string(&config.tab_label_mode),
-        ),
-        (
-            RUNTIME_TAB_LABELS_PLACEHOLDER,
-            render_tab_label_block(&tab_labels),
-        ),
-        (
-            RUNTIME_TAB_RENAME_PLACEHOLDER,
-            format!("    {}", tab_labels.tab_rename),
-        ),
+        (RUNTIME_HOST_THEME_PALETTES_PLACEHOLDER, host_theme_palettes),
         (
             RUNTIME_FLOATING_INDICATOR_PLACEHOLDER,
             escape_kdl_string("\u{2b1a} "),
@@ -1800,10 +1753,6 @@ pub fn render_yazelix_runtime_plugin_block(
         (RUNTIME_CPU_WIDGET_ARGS_PLACEHOLDER, widget_args()),
         (RUNTIME_RAM_WIDGET_ARGS_PLACEHOLDER, widget_args()),
         (
-            RUNTIME_PIPE_WORKSPACE_FORMAT_PLACEHOLDER,
-            widget_format(style.workspace, WIDGET_WORKSPACE),
-        ),
-        (
             RUNTIME_COMMAND_CLAUDE_USAGE_FORMAT_PLACEHOLDER,
             "{stdout}".to_string(),
         ),
@@ -1823,39 +1772,15 @@ pub fn render_yazelix_runtime_plugin_block(
             RUNTIME_COMMAND_RAM_FORMAT_PLACEHOLDER,
             "{stdout}".to_string(),
         ),
-        (
-            RUNTIME_VERSION_SEGMENT_PLACEHOLDER,
-            render_runtime_version_segment_with_style(style, chrome, !has_content_before_version),
-        ),
     ];
     let mut rendered = YAZELIX_RUNTIME_BAR_TEMPLATE.to_string();
     for (placeholder, value) in replacements {
         rendered = rendered.replace(placeholder, &value);
     }
-    for (placeholder, value) in style.template_replacements() {
-        rendered = rendered.replace(placeholder, value);
-    }
     if let Some(placeholder) = unresolved_runtime_preset_placeholder(&rendered) {
         return Err(BarRenderError::UnresolvedRuntimePresetPlaceholder { placeholder });
     }
     Ok(rendered)
-}
-
-fn render_tab_label_block(tab_labels: &TabLabelFormats) -> String {
-    [
-        tab_labels.tab_normal.as_str(),
-        tab_labels.tab_normal_fullscreen.as_str(),
-        tab_labels.tab_normal_sync.as_str(),
-        tab_labels.tab_normal_bell.as_str(),
-        tab_labels.tab_normal_flashing_bell.as_str(),
-        tab_labels.tab_active.as_str(),
-        tab_labels.tab_active_fullscreen.as_str(),
-        tab_labels.tab_active_sync.as_str(),
-    ]
-    .into_iter()
-    .map(|line| format!("    {line}"))
-    .collect::<Vec<_>>()
-    .join("\n")
 }
 
 fn unresolved_runtime_preset_placeholder(rendered: &str) -> Option<String> {
@@ -3911,22 +3836,40 @@ mod tests {
         }
     }
 
+    fn runtime_assignment<'a>(rendered: &'a str, key: &str) -> &'a str {
+        let line = rendered
+            .lines()
+            .find(|line| line.split_whitespace().next() == Some(key))
+            .unwrap_or_else(|| panic!("missing runtime assignment {key}"));
+        let (_, quoted) = line
+            .split_once('"')
+            .unwrap_or_else(|| panic!("runtime assignment {key} has no opening quote"));
+        quoted
+            .rsplit_once('"')
+            .unwrap_or_else(|| panic!("runtime assignment {key} has no closing quote"))
+            .0
+    }
+
     // Regression: integrated Yazelix KDL shape is owned by the child runtime template, not hardcoded in main or rebuilt as Rust string assembly.
     // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
     #[test]
     fn renders_yazelix_runtime_plugin_block_from_template() {
         let rendered = render_yazelix_runtime_plugin_block(&runtime_bar_config()).unwrap();
 
-        assert!(YAZELIX_RUNTIME_BAR_TEMPLATE.contains("pipe_workspace_format"));
+        assert!(YAZELIX_RUNTIME_BAR_TEMPLATE.contains(RUNTIME_ACTIVE_THEME_FIELDS_PLACEHOLDER));
         assert!(rendered.contains(r#"plugin location="file:/runtime/share/zjstatus.wasm" {"#));
         assert!(rendered.contains(r#"host_theme_mode "dark""#));
         assert!(rendered.contains(r##"host_theme_light_tab_normal "#[fg=#5c5f77] [{index}] ""##));
-        assert!(rendered.contains(
-            "format_right  \" #[fg=#ff0088,bold]{session} #[fg=#6c7086,bold]• #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]YZX {command_version} \" // {datetime}"
-        ));
+        assert_eq!(
+            runtime_assignment(&rendered, "format_right"),
+            " #[fg=#ff0088,bold]{session} #[fg=#6c7086,bold]• #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]YZX {command_version} "
+        );
         assert!(rendered.contains(r#"format_left   "{tabs}""#));
         assert!(!rendered.contains("{mode}"));
-        assert!(rendered.contains(r##"tab_normal   "#[fg=#ffff00] [{index}] ""##));
+        assert_eq!(
+            runtime_assignment(&rendered, "tab_normal"),
+            "#[fg=#ffff00] [{index}] "
+        );
         assert!(rendered.contains(
             r##"tab_normal_bell "#[fg=#ff0088,bold] [{index}] {sync_indicator}{fullscreen_indicator}""##
         ));
@@ -3978,9 +3921,10 @@ mod tests {
             r##"pipe_workspace_format " #[fg=#6c7086,bold]| #[fg=#00ff88,bold][{output}]""##
         ));
         assert!(rendered.contains(r##"command_cpu_format "{stdout}""##));
-        assert!(rendered.contains(
-            "format_right  \" #[fg=#ff0088,bold][{session}] #[fg=#6c7086,bold]| #[fg=#00ff88,bold][ hx]{pipe_workspace} #[fg=#6c7086,bold]| #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]| #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]| #[fg=#00ccff,bold]YZX {command_version} \" // {datetime}"
-        ));
+        assert_eq!(
+            runtime_assignment(&rendered, "format_right"),
+            " #[fg=#ff0088,bold][{session}] #[fg=#6c7086,bold]| #[fg=#00ff88,bold][ hx]{pipe_workspace} #[fg=#6c7086,bold]| #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]| #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]| #[fg=#00ccff,bold]YZX {command_version} "
+        );
     }
 
     // Defends: unsupported widget chrome settings fail before emitting invalid zjstatus KDL.
@@ -4008,13 +3952,15 @@ mod tests {
 
         assert!(rendered.contains(r#"host_theme_mode "light""#));
         assert!(rendered.contains(r##"host_theme_dark_tab_normal "#[fg=#ffff00] [{index}] ""##));
-        assert!(rendered.contains(
-            "format_right  \" #[fg=#7c3f97,bold]{session} #[fg=#8c8fa1,bold]• #[fg=#2f7d32,bold] hx{pipe_workspace} #[fg=#8c8fa1,bold]• #[fg=#a24f00]{command_cpu} #[fg=#8c8fa1,bold]• #[fg=#9a5a00,bold][demo] #[fg=#8c8fa1,bold]• #[fg=#1e66f5,bold]YZX {command_version} \" // {datetime}"
-        ));
+        assert_eq!(
+            runtime_assignment(&rendered, "format_right"),
+            " #[fg=#7c3f97,bold]{session} #[fg=#8c8fa1,bold]• #[fg=#2f7d32,bold] hx{pipe_workspace} #[fg=#8c8fa1,bold]• #[fg=#a24f00]{command_cpu} #[fg=#8c8fa1,bold]• #[fg=#9a5a00,bold][demo] #[fg=#8c8fa1,bold]• #[fg=#1e66f5,bold]YZX {command_version} "
+        );
         assert!(!rendered.contains("mode_normal"));
-        assert!(rendered.contains(
-            r##"tab_active   "#[bg=#ccd0da,fg=#303446,bold] [{index}] {floating_indicator}""##
-        ));
+        assert_eq!(
+            runtime_assignment(&rendered, "tab_active"),
+            "#[bg=#ccd0da,fg=#303446,bold] [{index}] {floating_indicator}"
+        );
         assert!(rendered.contains(
             r##"tab_normal_bell "#[fg=#b4637a,bold] [{index}] {sync_indicator}{fullscreen_indicator}""##
         ));
@@ -4028,6 +3974,44 @@ mod tests {
         assert!(rendered.contains(r##"command_codex_usage_rendermode "raw""##));
         assert!(rendered.contains(r##"command_cpu_format "{stdout}""##));
         assert!(!rendered.contains("command_cursor"));
+    }
+
+    // Defends: launch rendering and live host-theme switching consume one complete field set instead of drifting key by key.
+    // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
+    #[test]
+    fn active_and_live_runtime_theme_fields_stay_in_parity() {
+        let mut config = runtime_bar_config();
+        let chrome = WidgetChrome::parse(&config.widget_frame, &config.widget_separator).unwrap();
+        let dark_theme = runtime_theme_fields(&config, &DARK_BAR_STYLE, chrome).unwrap();
+        let light_theme = runtime_theme_fields(&config, &LIGHT_BAR_STYLE, chrome).unwrap();
+        let keys = dark_theme
+            .iter()
+            .map(|(key, _)| *key)
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(keys.len(), dark_theme.len(), "theme keys must be unique");
+        assert_eq!(
+            keys,
+            light_theme.iter().map(|(key, _)| *key).collect(),
+            "dark and light palettes must cover the same fields"
+        );
+
+        for (mode, active_theme) in [
+            (APPEARANCE_MODE_DARK, &dark_theme),
+            (APPEARANCE_MODE_LIGHT, &light_theme),
+        ] {
+            config.appearance_mode = mode.to_string();
+            let rendered = render_yazelix_runtime_plugin_block(&config).unwrap();
+
+            for (key, value) in active_theme {
+                assert_eq!(runtime_assignment(&rendered, key), escape_kdl_string(value));
+                assert_eq!(
+                    runtime_assignment(&rendered, key),
+                    runtime_assignment(&rendered, &format!("host_theme_{mode}_{key}")),
+                    "active {mode} field {key} must equal its live overlay"
+                );
+            }
+        }
     }
 
     // Defends: vanilla users keep a simple standalone preset and do not inherit integrated Yazelix runtime placeholders.

@@ -658,9 +658,9 @@ mod tests {
             )
         );
         assert!(plugin_block.contains(
-            "format_right  \" #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]YZX {command_version} \" // {datetime}"
+            "format_right \" #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]YZX {command_version} \""
         ));
-        assert!(plugin_block.contains(r##"tab_normal   "#[fg=#ffff00] [{index}] ""##));
+        assert!(plugin_block.contains(r##"tab_normal "#[fg=#ffff00] [{index}] ""##));
         assert!(plugin_block.contains(
             r##"tab_normal_bell "#[fg=#ff0088,bold] [{index}] {sync_indicator}{fullscreen_indicator}""##
         ));

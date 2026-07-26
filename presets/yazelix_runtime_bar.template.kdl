@@ -1,7 +1,7 @@
 plugin location="__YAZELIX_RUNTIME_ZJSTATUS_PLUGIN_URL__" {
     format_left   "{tabs}"
     format_center ""
-    format_right  "__YAZELIX_RUNTIME_WIDGET_TRAY____YAZELIX_RUNTIME_CUSTOM_TEXT____YAZELIX_RUNTIME_VERSION_SEGMENT__" // {datetime}
+__YAZELIX_RUNTIME_ACTIVE_THEME_FIELDS__
     format_hide_on_overlength "true"
     format_precedence "lrc"
     format_space  ""
@@ -10,9 +10,7 @@ plugin location="__YAZELIX_RUNTIME_ZJSTATUS_PLUGIN_URL__" {
     host_theme_mode "__YAZELIX_RUNTIME_APPEARANCE_MODE__"
 __YAZELIX_RUNTIME_HOST_THEME_PALETTES__
 
-__YAZELIX_RUNTIME_TAB_LABELS__
     tab_separator ""
-__YAZELIX_RUNTIME_TAB_RENAME__
     tab_sync_indicator       "<> "
     tab_fullscreen_indicator "[] "
     tab_floating_indicator   "__YAZELIX_RUNTIME_FLOATING_INDICATOR__"
@@ -22,13 +20,8 @@ __YAZELIX_RUNTIME_TAB_RENAME__
     tab_activity_busy_marker "·"
     tab_activity_alert_marker "✓"
     tab_display_count "6"
-    tab_truncate_start_format "__YAZELIX_RUNTIME_STYLE_TAB_TRUNCATE__< +{count} ... "
-    tab_truncate_end_format   "__YAZELIX_RUNTIME_STYLE_TAB_TRUNCATE__... +{count} > "
 
-    datetime        "__YAZELIX_RUNTIME_STYLE_DATETIME__ {format} "
     datetime_format "%H:%M %d/%m"
-
-    pipe_workspace_format "__YAZELIX_RUNTIME_PIPE_WORKSPACE_FORMAT__"
 
     command_term_command "__YAZELIX_RUNTIME_WIDGET_BIN__ term"
     command_term_format "{stdout}"
