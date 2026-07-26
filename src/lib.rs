@@ -1636,7 +1636,17 @@ fn kdl_assignment_value(assignment: &str) -> String {
 fn render_runtime_theme_fields(prefix: &str, fields: &[(&'static str, String)]) -> String {
     fields
         .iter()
-        .map(|(key, value)| format!("    {prefix}{key} \"{}\"", escape_kdl_string(value)))
+        .map(|(key, value)| {
+            let datetime_marker = if prefix.is_empty() && *key == "format_right" {
+                " // {datetime}"
+            } else {
+                ""
+            };
+            format!(
+                "    {prefix}{key} \"{}\"{datetime_marker}",
+                escape_kdl_string(value)
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
