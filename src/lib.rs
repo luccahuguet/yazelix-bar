@@ -1288,8 +1288,7 @@ pub fn refresh_codex_usage_shared_cache(
         .map(|entry| windowed_usage_facts_from_cache_entry(&entry));
     let mut facts = collect_codex_usage_facts(path_var, timeout, quota_backoff_until.is_none());
     let refresh_incomplete = !codex_usage_facts_are_complete(&facts);
-    let quota_probe_failed = quota_backoff_until.is_none() && !facts.has_quota();
-    if quota_probe_failed || quota_backoff_until.is_some() {
+    if quota_backoff_until.is_some() || !facts.has_quota() {
         preserve_previous_codex_window_quota(&mut facts, previous_facts.as_ref(), now);
     }
     preserve_previous_codex_window_tokens(&mut facts, previous_facts.as_ref());
@@ -1345,7 +1344,7 @@ pub fn refresh_codex_usage_shared_cache(
             "quota_backoff_until_unix_seconds".to_string(),
             serde_json::json!(backoff_until),
         );
-    } else if facts.has_tokens() && (quota_probe_failed || !facts.has_quota()) {
+    } else if facts.has_tokens() && !facts.has_quota() {
         entry.insert(
             "quota_backoff_until_unix_seconds".to_string(),
             serde_json::json!(now.saturating_add(error_backoff_seconds)),
@@ -2578,7 +2577,7 @@ fn collect_codex_usage_facts(
     let mut facts = WindowedAgentUsageFacts::default();
     match run_tokenusage_json_command_with_budget(
         &binary_path,
-        codex_active_block_args().as_slice(),
+        CODEX_ACTIVE_BLOCK_ARGS,
         started,
         timeout,
     ) {
@@ -2588,12 +2587,8 @@ fn collect_codex_usage_facts(
         Ok(None) => facts.error = Some("active block unavailable".to_string()),
         Err(error) => facts.error = Some(error),
     }
-    match run_tokenusage_json_command_with_budget(
-        &binary_path,
-        codex_weekly_args().as_slice(),
-        started,
-        timeout,
-    ) {
+    match run_tokenusage_json_command_with_budget(&binary_path, CODEX_WEEKLY_ARGS, started, timeout)
+    {
         Ok(Some(value)) => facts.weekly_tokens = tokenusage_weekly_tokens_from_json(&value),
         Ok(None) => {
             if facts.error.is_none() {
@@ -2609,7 +2604,7 @@ fn collect_codex_usage_facts(
     if include_quota {
         match run_tokenusage_json_command_with_budget(
             &binary_path,
-            codex_official_limits_args().as_slice(),
+            CODEX_OFFICIAL_LIMITS_ARGS,
             started,
             timeout,
         ) {
@@ -2659,24 +2654,14 @@ fn collect_claude_usage_facts(
     };
 
     let mut facts = WindowedAgentUsageFacts::default();
-    match run_tokenusage_json_command(
-        &binary_path,
-        claude_active_block_args().as_slice(),
-        timeout,
-        false,
-    ) {
+    match run_tokenusage_json_command(&binary_path, CLAUDE_ACTIVE_BLOCK_ARGS, timeout) {
         Ok(Some(value)) => {
             facts.five_hour_tokens = tokenusage_active_block_tokens_from_json(&value)
         }
         Ok(None) => facts.error = Some("active block unavailable".to_string()),
         Err(error) => facts.error = Some(error),
     }
-    match run_tokenusage_json_command(
-        &binary_path,
-        claude_weekly_args().as_slice(),
-        timeout,
-        false,
-    ) {
+    match run_tokenusage_json_command(&binary_path, CLAUDE_WEEKLY_ARGS, timeout) {
         Ok(Some(value)) => facts.weekly_tokens = tokenusage_weekly_tokens_from_json(&value),
         Ok(None) => {
             if facts.error.is_none() {
@@ -2690,12 +2675,7 @@ fn collect_claude_usage_facts(
         }
     }
     if include_quota {
-        match run_tokenusage_json_command(
-            &binary_path,
-            claude_official_limits_args().as_slice(),
-            timeout,
-            false,
-        ) {
+        match run_tokenusage_json_command(&binary_path, CLAUDE_OFFICIAL_LIMITS_ARGS, timeout) {
             Ok(Some(value)) => {
                 let quota = claude_quota_from_official_json(&value);
                 facts.five_hour_remaining_percent = quota.five_hour_remaining_percent;
@@ -2943,87 +2923,78 @@ fn push_unique_path(paths: &mut Vec<std::path::PathBuf>, path: std::path::PathBu
     }
 }
 
-fn codex_active_block_args() -> Vec<&'static str> {
-    vec![
-        "blocks",
-        "--active",
-        "--json",
-        "--offline",
-        "--workers",
-        "1",
-        "--no-claude",
-        "--no-antigravity",
-    ]
-}
+const CODEX_ACTIVE_BLOCK_ARGS: &[&str] = &[
+    "blocks",
+    "--active",
+    "--json",
+    "--offline",
+    "--workers",
+    "1",
+    "--no-claude",
+    "--no-antigravity",
+];
 
-fn codex_weekly_args() -> Vec<&'static str> {
-    vec![
-        "weekly",
-        "--json",
-        "--offline",
-        "--workers",
-        "1",
-        "--no-claude",
-        "--no-antigravity",
-        "--order",
-        "desc",
-    ]
-}
+const CODEX_WEEKLY_ARGS: &[&str] = &[
+    "weekly",
+    "--json",
+    "--offline",
+    "--workers",
+    "1",
+    "--no-claude",
+    "--no-antigravity",
+    "--order",
+    "desc",
+];
 
-fn codex_official_limits_args() -> Vec<&'static str> {
-    vec![
-        "blocks",
-        "--active",
-        "--json",
-        "--official-limits",
-        "--workers",
-        "1",
-        "--no-claude",
-        "--no-antigravity",
-    ]
-}
+const CODEX_OFFICIAL_LIMITS_ARGS: &[&str] = &[
+    "blocks",
+    "--active",
+    "--json",
+    "--official-limits",
+    "--workers",
+    "1",
+    "--no-claude",
+    "--no-antigravity",
+];
 
-fn claude_active_block_args() -> Vec<&'static str> {
-    vec![
-        "blocks",
-        "--active",
-        "--json",
-        "--offline",
-        "--no-codex",
-        "--no-antigravity",
-    ]
-}
+const CLAUDE_ACTIVE_BLOCK_ARGS: &[&str] = &[
+    "blocks",
+    "--active",
+    "--json",
+    "--offline",
+    "--no-codex",
+    "--no-antigravity",
+];
 
-fn claude_weekly_args() -> Vec<&'static str> {
-    vec![
-        "weekly",
-        "--json",
-        "--offline",
-        "--no-codex",
-        "--no-antigravity",
-        "--order",
-        "desc",
-    ]
-}
+const CLAUDE_WEEKLY_ARGS: &[&str] = &[
+    "weekly",
+    "--json",
+    "--offline",
+    "--no-codex",
+    "--no-antigravity",
+    "--order",
+    "desc",
+];
 
-fn claude_official_limits_args() -> Vec<&'static str> {
-    vec![
-        "blocks",
-        "--active",
-        "--json",
-        "--official-limits",
-        "--no-codex",
-        "--no-antigravity",
-    ]
-}
+const CLAUDE_OFFICIAL_LIMITS_ARGS: &[&str] = &[
+    "blocks",
+    "--active",
+    "--json",
+    "--official-limits",
+    "--no-codex",
+    "--no-antigravity",
+];
 
 fn run_tokenusage_json_command(
     binary_path: &std::path::Path,
     args: &[&str],
     timeout: std::time::Duration,
-    limit_threads: bool,
 ) -> Result<Option<serde_json::Value>, String> {
-    let output = run_agent_usage_command_with_timeout(binary_path, args, timeout, limit_threads)
+    let worker_count = args
+        .windows(2)
+        .find(|pair| pair[0] == "--workers")
+        .map(|pair| pair[1]);
+    let output = run_agent_usage_command_with_timeout(binary_path, args, timeout, worker_count)
         .map_err(|error| {
             format!(
                 "failed to run tokenusage command {}: {error}",
@@ -3051,27 +3022,25 @@ fn run_tokenusage_json_command_with_budget(
     started: std::time::Instant,
     timeout: std::time::Duration,
 ) -> Result<Option<serde_json::Value>, String> {
-    let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
-        return Ok(None);
-    };
+    let remaining = timeout.saturating_sub(started.elapsed());
     if remaining.is_zero() {
         return Ok(None);
     }
-    run_tokenusage_json_command(binary_path, args, remaining, true)
+    run_tokenusage_json_command(binary_path, args, remaining)
 }
 
 fn run_agent_usage_command_with_timeout(
     binary_path: &std::path::Path,
     args: &[&str],
     timeout: std::time::Duration,
-    limit_threads: bool,
+    worker_count: Option<&str>,
 ) -> std::io::Result<Option<std::process::Output>> {
     let mut command = std::process::Command::new(binary_path);
     command.args(args);
-    if limit_threads {
+    if let Some(worker_count) = worker_count {
         command
-            .env("RAYON_NUM_THREADS", "1")
-            .env("TOKIO_WORKER_THREADS", "1");
+            .env("RAYON_NUM_THREADS", worker_count)
+            .env("TOKIO_WORKER_THREADS", worker_count);
     }
     let mut child = command
         .stdout(std::process::Stdio::piped())
@@ -4479,38 +4448,22 @@ fi
         assert!(started.elapsed() < std::time::Duration::from_secs(2));
         assert_eq!(text, " [codex 5h|138M 4d/7d|1.34B|80%]");
         let cache = read_codex_usage_shared_cache_value(&cache_path).unwrap();
-        assert_eq!(
-            (
-                cache
-                    .pointer("/codex/status")
-                    .and_then(serde_json::Value::as_str),
-                cache
-                    .pointer("/codex/backoff_until_unix_seconds")
-                    .and_then(serde_json::Value::as_u64),
-            ),
-            (Some("partial"), Some(2_800))
-        );
-        let first_calls = std::fs::read_to_string(&calls_path).unwrap();
-        let first_calls = first_calls.lines().collect::<Vec<_>>();
+        let entry = &cache["codex"];
+        assert_eq!(entry["status"].as_str(), Some("partial"));
+        assert_eq!(entry["backoff_until_unix_seconds"].as_u64(), Some(2_800));
+        let calls = std::fs::read_to_string(&calls_path).unwrap();
+        let first_calls = calls.lines().collect::<Vec<_>>();
         assert_eq!(first_calls.len(), 2);
         assert!(
             first_calls
                 .iter()
-                .all(|call| call.starts_with("1|1|") && call.contains("--workers 1"))
+                .all(|call| call.starts_with("1|1|") && call.contains(" --workers 1 "))
         );
         assert!(first_calls[0].contains("|blocks "));
         assert!(first_calls[1].contains("|weekly "));
 
-        let second = render(1_010);
-
-        assert!(second.contains("138M"));
-        assert_eq!(
-            std::fs::read_to_string(&calls_path)
-                .unwrap()
-                .lines()
-                .count(),
-            2
-        );
+        assert_eq!(render(1_010), text);
+        assert_eq!(std::fs::read_to_string(&calls_path).unwrap(), calls);
         let _ = std::fs::remove_dir_all(temp);
     }
 
