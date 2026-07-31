@@ -2659,15 +2659,24 @@ fn collect_claude_usage_facts(
     };
 
     let mut facts = WindowedAgentUsageFacts::default();
-    match run_tokenusage_json_command(&binary_path, claude_active_block_args().as_slice(), timeout)
-    {
+    match run_tokenusage_json_command(
+        &binary_path,
+        claude_active_block_args().as_slice(),
+        timeout,
+        false,
+    ) {
         Ok(Some(value)) => {
             facts.five_hour_tokens = tokenusage_active_block_tokens_from_json(&value)
         }
         Ok(None) => facts.error = Some("active block unavailable".to_string()),
         Err(error) => facts.error = Some(error),
     }
-    match run_tokenusage_json_command(&binary_path, claude_weekly_args().as_slice(), timeout) {
+    match run_tokenusage_json_command(
+        &binary_path,
+        claude_weekly_args().as_slice(),
+        timeout,
+        false,
+    ) {
         Ok(Some(value)) => facts.weekly_tokens = tokenusage_weekly_tokens_from_json(&value),
         Ok(None) => {
             if facts.error.is_none() {
@@ -2685,6 +2694,7 @@ fn collect_claude_usage_facts(
             &binary_path,
             claude_official_limits_args().as_slice(),
             timeout,
+            false,
         ) {
             Ok(Some(value)) => {
                 let quota = claude_quota_from_official_json(&value);
@@ -3011,9 +3021,10 @@ fn run_tokenusage_json_command(
     binary_path: &std::path::Path,
     args: &[&str],
     timeout: std::time::Duration,
+    limit_threads: bool,
 ) -> Result<Option<serde_json::Value>, String> {
-    let output =
-        run_agent_usage_command_with_timeout(binary_path, args, timeout).map_err(|error| {
+    let output = run_agent_usage_command_with_timeout(binary_path, args, timeout, limit_threads)
+        .map_err(|error| {
             format!(
                 "failed to run tokenusage command {}: {error}",
                 binary_path.display()
@@ -3046,16 +3057,23 @@ fn run_tokenusage_json_command_with_budget(
     if remaining.is_zero() {
         return Ok(None);
     }
-    run_tokenusage_json_command(binary_path, args, remaining)
+    run_tokenusage_json_command(binary_path, args, remaining, true)
 }
 
 fn run_agent_usage_command_with_timeout(
     binary_path: &std::path::Path,
     args: &[&str],
     timeout: std::time::Duration,
+    limit_threads: bool,
 ) -> std::io::Result<Option<std::process::Output>> {
-    let mut child = std::process::Command::new(binary_path)
-        .args(args)
+    let mut command = std::process::Command::new(binary_path);
+    command.args(args);
+    if limit_threads {
+        command
+            .env("RAYON_NUM_THREADS", "1")
+            .env("TOKIO_WORKER_THREADS", "1");
+    }
+    let mut child = command
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()?;
@@ -4415,7 +4433,7 @@ esac
         write_tokenusage_provider_script(
             &bin_dir,
             r#"#!/usr/bin/env sh
-printf '%s\n' "$*" >> "${0%/*}/calls"
+printf '%s|%s|%s\n' "$RAYON_NUM_THREADS" "$TOKIO_WORKER_THREADS" "$*" >> "${0%/*}/calls"
 if [ "$1" = "blocks" ]; then
   printf '%s\n' '{"blocks":[{"isActive":true,"totals":{"total_tokens":138456789}}]}'
 else
@@ -4475,9 +4493,13 @@ fi
         let first_calls = std::fs::read_to_string(&calls_path).unwrap();
         let first_calls = first_calls.lines().collect::<Vec<_>>();
         assert_eq!(first_calls.len(), 2);
-        assert!(first_calls.iter().all(|call| call.contains("--workers 1")));
-        assert!(first_calls[0].starts_with("blocks "));
-        assert!(first_calls[1].starts_with("weekly "));
+        assert!(
+            first_calls
+                .iter()
+                .all(|call| call.starts_with("1|1|") && call.contains("--workers 1"))
+        );
+        assert!(first_calls[0].contains("|blocks "));
+        assert!(first_calls[1].contains("|weekly "));
 
         let second = render(1_010);
 
