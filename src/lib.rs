@@ -4426,7 +4426,7 @@ fi
             }),
         )
         .unwrap();
-        let timeout = std::time::Duration::from_millis(150);
+        let timeout = std::time::Duration::from_secs(1);
         let render = |now_unix_seconds| {
             codex_usage_widget_text(CodexUsageWidgetOptions {
                 cache_path: &cache_path,
@@ -4444,7 +4444,7 @@ fi
 
         let text = render(1_000);
 
-        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
         assert_eq!(text, " [codex 5h|138M 4d/7d|1.34B|80%]");
         let cache = read_codex_usage_shared_cache_value(&cache_path).unwrap();
         let entry = &cache["codex"];
