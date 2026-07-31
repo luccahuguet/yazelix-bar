@@ -2990,12 +2990,8 @@ fn run_tokenusage_json_command(
     args: &[&str],
     timeout: std::time::Duration,
 ) -> Result<Option<serde_json::Value>, String> {
-    let worker_count = args
-        .windows(2)
-        .find(|pair| pair[0] == "--workers")
-        .map(|pair| pair[1]);
-    let output = run_agent_usage_command_with_timeout(binary_path, args, timeout, worker_count)
-        .map_err(|error| {
+    let output =
+        run_tokenusage_command_with_timeout(binary_path, args, timeout).map_err(|error| {
             format!(
                 "failed to run tokenusage command {}: {error}",
                 binary_path.display()
@@ -3029,15 +3025,18 @@ fn run_tokenusage_json_command_with_budget(
     run_tokenusage_json_command(binary_path, args, remaining)
 }
 
-fn run_agent_usage_command_with_timeout(
+fn run_tokenusage_command_with_timeout(
     binary_path: &std::path::Path,
     args: &[&str],
     timeout: std::time::Duration,
-    worker_count: Option<&str>,
 ) -> std::io::Result<Option<std::process::Output>> {
     let mut command = std::process::Command::new(binary_path);
     command.args(args);
-    if let Some(worker_count) = worker_count {
+    if let Some(worker_count) = args
+        .windows(2)
+        .find(|pair| pair[0] == "--workers")
+        .map(|pair| pair[1])
+    {
         command
             .env("RAYON_NUM_THREADS", worker_count)
             .env("TOKIO_WORKER_THREADS", worker_count);
