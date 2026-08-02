@@ -169,7 +169,7 @@ Those helpers are facts-in, styled-text-out. They do not read `~/.config/yazelix
 
 ## Yazelix-Specific Widgets
 
-Workspace remains Yazelix-only because it is derived from Yazelix session facts and pushed into a `pipe_workspace` widget by the Yazelix pane orchestrator. Terminal display is also Yazelix-only in the integrated runtime because `yazelix_zellij_bar_widget term` reads the running session's `YAZELIX_SESSION_TERMINAL` value instead of trusting a shared generated layout. Yazelix version display is Yazelix-only because it reads the active Yazelix runtime identity
+Workspace remains Yazelix-only because it is derived from Yazelix session facts and pushed into a `pipe_workspace` widget by the Yazelix pane orchestrator. Terminal display is also Yazelix-only in the integrated runtime because `yazelix_zellij_bar_widget term` reads the running session's `YAZELIX_SESSION_TERMINAL` value instead of trusting a shared generated layout. The Yazelix badge is also runtime-only: its `version` command reads the exact packaged version and `stable`, `main`, or `edge` channel from `runtime_identity.json` and renders `NOVA <compact-version> <CHANNEL>`
 
 CPU, RAM, Codex, Claude, and OpenCode Go widgets are bar-owned standalone commands. Yazelix-only integration for those widgets is limited to generated layout wiring and default cache-path derivation from the full runtime
 

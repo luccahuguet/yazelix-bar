@@ -78,10 +78,10 @@ fn run_version(args: &[String]) -> Result<String, String> {
     if flag != "--runtime-dir" {
         return Err("version expects --runtime-dir <runtime-dir>".to_string());
     }
-    runtime_version(Path::new(runtime_dir))
+    runtime_badge(Path::new(runtime_dir))
 }
 
-fn runtime_version(runtime_dir: &Path) -> Result<String, String> {
+fn runtime_badge(runtime_dir: &Path) -> Result<String, String> {
     let identity_path = runtime_dir.join("runtime_identity.json");
     let raw = std::fs::read_to_string(&identity_path).map_err(|error| {
         format!(
@@ -95,26 +95,52 @@ fn runtime_version(runtime_dir: &Path) -> Result<String, String> {
             identity_path.display()
         )
     })?;
-    identity
-        .get("version")
-        .and_then(serde_json::Value::as_str)
-        .filter(|version| !version.trim().is_empty())
-        .map(runtime_version_for_status_bar)
-        .ok_or_else(|| {
-            format!(
-                "Yazelix runtime identity at {} is missing string field `version`",
-                identity_path.display()
-            )
-        })
+    let field = |name| {
+        identity
+            .get(name)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "Yazelix runtime identity at {} is missing string field `{name}`",
+                    identity_path.display()
+                )
+            })
+    };
+    runtime_badge_for_status_bar(field("version")?, field("channel")?)
 }
 
-fn runtime_version_for_status_bar(version: &str) -> String {
-    version
-        .strip_prefix('v')
-        .or_else(|| version.strip_prefix('V'))
-        .filter(|suffix| suffix.chars().next().is_some_and(|ch| ch.is_ascii_digit()))
-        .unwrap_or(version)
-        .to_string()
+fn runtime_badge_for_status_bar(version: &str, channel: &str) -> Result<String, String> {
+    let channel = match channel {
+        "stable" => "STABLE",
+        "main" => "MAIN",
+        "edge" => "EDGE",
+        _ => return Err(format!("unsupported Yazelix channel: {channel}")),
+    };
+    let compact_version = if version == "dev" {
+        "NOVA DEV".to_string()
+    } else {
+        let (core, beta) = version
+            .split_once("-beta.")
+            .map_or((version, None), |(core, beta)| (core, Some(beta)));
+        let components = core.split('.').collect::<Vec<_>>();
+        let valid_component = |value: &&str| {
+            !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
+        };
+        if components.len() != 3
+            || !components.iter().all(valid_component)
+            || beta.is_some_and(|value| {
+                value.is_empty() || !value.chars().all(|character| character.is_ascii_digit())
+            })
+        {
+            return Err(format!("unsupported Nova version: {version}"));
+        }
+        match beta {
+            Some(beta) => format!("NOVA β{beta}"),
+            None => format!("NOVA {}.{}", components[0], components[1]),
+        }
+    };
+    Ok(format!("{compact_version} {channel}"))
 }
 
 fn run_render_yazelix_runtime(args: &[String]) -> Result<String, String> {
@@ -658,7 +684,7 @@ mod tests {
             )
         );
         assert!(plugin_block.contains(
-            "format_right \" #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]YZX {command_version} \""
+            "format_right \" #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]{command_version} \""
         ));
         assert!(plugin_block.contains(r##"tab_normal "#[fg=#ffff00] [{index}] ""##));
         assert!(plugin_block.contains(
@@ -814,70 +840,59 @@ mod tests {
         let _ = std::fs::remove_dir_all(cache_dir);
     }
 
-    // Defends: integrated Yazelix version display reads the packaged runtime identity, not removed Nushell constants.
+    // Defends: one packaged version/channel identity produces the complete, compact Nova badge.
     #[test]
-    fn version_command_reads_runtime_identity_version() {
-        let runtime_dir = unique_test_dir("yazelix-zellij-bar-version-ok");
-        std::fs::create_dir_all(&runtime_dir).unwrap();
-        std::fs::write(
-            runtime_dir.join("runtime_identity.json"),
-            r#"{"schema_version":1,"version":"v-test"}"#,
-        )
-        .unwrap();
-
-        let output = run(vec![
-            "version".into(),
-            "--runtime-dir".into(),
-            runtime_dir.to_string_lossy().into_owned(),
-        ])
-        .unwrap();
-
-        assert_eq!(output, "v-test");
-        let _ = std::fs::remove_dir_all(runtime_dir);
+    fn version_command_renders_packaged_channel_badges() {
+        for (version, channel, expected) in [
+            ("dev", "stable", "NOVA DEV STABLE"),
+            ("1.0.0-beta.4", "stable", "NOVA β4 STABLE"),
+            ("1.0.0-beta.12", "main", "NOVA β12 MAIN"),
+            ("1.0.0", "edge", "NOVA 1.0 EDGE"),
+        ] {
+            assert_eq!(
+                run_version_fixture(&format!(
+                    r#"{{"version":"{version}","channel":"{channel}"}}"#
+                ))
+                .unwrap(),
+                expected
+            );
+        }
     }
 
-    // Defends: the status bar keeps the release tag compact while preserving non-release version strings.
+    // Regression: malformed identities must fail visibly instead of rendering an ambiguous badge.
     #[test]
-    fn version_command_strips_release_v_prefix_for_status_bar() {
-        let runtime_dir = unique_test_dir("yazelix-zellij-bar-version-release");
-        std::fs::create_dir_all(&runtime_dir).unwrap();
-        std::fs::write(
-            runtime_dir.join("runtime_identity.json"),
-            r#"{"schema_version":1,"version":"v17.5"}"#,
-        )
-        .unwrap();
-
-        let output = run(vec![
-            "version".into(),
-            "--runtime-dir".into(),
-            runtime_dir.to_string_lossy().into_owned(),
-        ])
-        .unwrap();
-
-        assert_eq!(output, "17.5");
-        let _ = std::fs::remove_dir_all(runtime_dir);
+    fn version_command_rejects_invalid_runtime_identity() {
+        for (identity, expected) in [
+            (r#"{"channel":"stable"}"#, "missing string field `version`"),
+            (r#"{"version":"1.0.0"}"#, "missing string field `channel`"),
+            (
+                r#"{"version":"1.0.0","channel":"preview"}"#,
+                "unsupported Yazelix channel: preview",
+            ),
+            (
+                r#"{"version":"v-test","channel":"stable"}"#,
+                "unsupported Nova version: v-test",
+            ),
+        ] {
+            assert!(
+                run_version_fixture(identity)
+                    .unwrap_err()
+                    .contains(expected)
+            );
+        }
     }
 
-    // Regression: a broken runtime identity must be visible instead of making the zjstatus command render an empty version.
-    #[test]
-    fn version_command_rejects_missing_runtime_identity_version() {
-        let runtime_dir = unique_test_dir("yazelix-zellij-bar-version-missing");
+    fn run_version_fixture(identity: &str) -> Result<String, String> {
+        let runtime_dir = unique_test_dir("yazelix-zellij-bar-version");
         std::fs::create_dir_all(&runtime_dir).unwrap();
-        std::fs::write(
-            runtime_dir.join("runtime_identity.json"),
-            r#"{"schema_version":1}"#,
-        )
-        .unwrap();
-
-        let error = run(vec![
+        std::fs::write(runtime_dir.join("runtime_identity.json"), identity).unwrap();
+        let result = run(vec![
             "version".into(),
             "--runtime-dir".into(),
             runtime_dir.to_string_lossy().into_owned(),
-        ])
-        .unwrap_err();
-
-        assert!(error.contains("missing string field `version`"));
+        ]);
         let _ = std::fs::remove_dir_all(runtime_dir);
+        result
     }
 
     fn unique_test_dir(stem: &str) -> std::path::PathBuf {

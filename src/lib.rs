@@ -1882,7 +1882,7 @@ fn render_runtime_version_segment_with_style(
     first: bool,
 ) -> String {
     format!(
-        "{}{}YZX {} ",
+        "{}{}{} ",
         chrome.styled_segment_prefix(first, style),
         style.brand,
         COMMAND_VERSION
@@ -3886,7 +3886,7 @@ mod tests {
         assert!(rendered.contains(r##"host_theme_light_tab_normal "#[fg=#5c5f77] [{index}] ""##));
         assert_eq!(
             runtime_assignment(&rendered, "format_right"),
-            " #[fg=#ff0088,bold]{session} #[fg=#6c7086,bold]• #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]YZX {command_version} "
+            " #[fg=#ff0088,bold]{session} #[fg=#6c7086,bold]• #[fg=#00ff88,bold] hx{pipe_workspace} #[fg=#6c7086,bold]• #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]• #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]• #[fg=#00ccff,bold]{command_version} "
         );
         assert!(rendered.contains(r#"format_left   "{tabs}""#));
         assert!(!rendered.contains("{mode}"));
@@ -3947,7 +3947,7 @@ mod tests {
         assert!(rendered.contains(r##"command_cpu_format "{stdout}""##));
         assert_eq!(
             runtime_assignment(&rendered, "format_right"),
-            " #[fg=#ff0088,bold][{session}] #[fg=#6c7086,bold]| #[fg=#00ff88,bold][ hx]{pipe_workspace} #[fg=#6c7086,bold]| #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]| #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]| #[fg=#00ccff,bold]YZX {command_version} "
+            " #[fg=#ff0088,bold][{session}] #[fg=#6c7086,bold]| #[fg=#00ff88,bold][ hx]{pipe_workspace} #[fg=#6c7086,bold]| #[fg=#ff6600]{command_cpu} #[fg=#6c7086,bold]| #[fg=#ffff00,bold][demo] #[fg=#6c7086,bold]| #[fg=#00ccff,bold]{command_version} "
         );
     }
 
@@ -3978,7 +3978,7 @@ mod tests {
         assert!(rendered.contains(r##"host_theme_dark_tab_normal "#[fg=#ffff00] [{index}] ""##));
         assert_eq!(
             runtime_assignment(&rendered, "format_right"),
-            " #[fg=#7c3f97,bold]{session} #[fg=#8c8fa1,bold]• #[fg=#2f7d32,bold] hx{pipe_workspace} #[fg=#8c8fa1,bold]• #[fg=#a24f00]{command_cpu} #[fg=#8c8fa1,bold]• #[fg=#9a5a00,bold][demo] #[fg=#8c8fa1,bold]• #[fg=#1e66f5,bold]YZX {command_version} "
+            " #[fg=#7c3f97,bold]{session} #[fg=#8c8fa1,bold]• #[fg=#2f7d32,bold] hx{pipe_workspace} #[fg=#8c8fa1,bold]• #[fg=#a24f00]{command_cpu} #[fg=#8c8fa1,bold]• #[fg=#9a5a00,bold][demo] #[fg=#8c8fa1,bold]• #[fg=#1e66f5,bold]{command_version} "
         );
         assert!(!rendered.contains("mode_normal"));
         assert_eq!(

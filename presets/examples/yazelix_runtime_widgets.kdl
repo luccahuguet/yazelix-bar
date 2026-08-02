@@ -7,7 +7,7 @@ tab_activity_pipe_name "pipe_tab_activity"
 tab_activity_busy_marker "·"
 tab_activity_alert_marker "✓"
 
-format_right "#[fg=#ff0088,bold]{session}{pipe_workspace}{command_claude_usage}{command_codex_usage}{command_opencode_go_usage}{command_cpu}{command_ram} #[fg=#00ccff,bold]YZX {command_version} "
+format_right "#[fg=#ff0088,bold]{session}{pipe_workspace}{command_claude_usage}{command_codex_usage}{command_opencode_go_usage}{command_cpu}{command_ram} #[fg=#00ccff,bold]{command_version} "
 
 pipe_workspace_format "#[fg=#00ff88,bold]{output}"
 
