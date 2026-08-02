@@ -111,12 +111,10 @@ fn runtime_badge(runtime_dir: &Path) -> Result<String, String> {
 }
 
 fn runtime_badge_for_status_bar(version: &str, channel: &str) -> Result<String, String> {
-    let channel = match channel {
-        "stable" => "STABLE",
-        "main" => "MAIN",
-        "edge" => "EDGE",
-        _ => return Err(format!("unsupported Yazelix channel: {channel}")),
-    };
+    if !matches!(channel, "stable" | "main" | "edge") {
+        return Err(format!("unsupported Yazelix channel: {channel}"));
+    }
+    let channel = channel.to_ascii_uppercase();
     let compact_version = if version == "dev" {
         "NOVA DEV".to_string()
     } else {
