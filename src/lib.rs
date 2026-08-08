@@ -908,7 +908,7 @@ impl WindowedAgentUsageFacts {
     }
 }
 
-pub const CODEX_USAGE_CACHE_SCHEMA_VERSION: i64 = 3;
+pub const CODEX_USAGE_CACHE_SCHEMA_VERSION: i64 = 4;
 pub const CLAUDE_USAGE_CACHE_SCHEMA_VERSION: i64 = 1;
 pub const OPENCODE_GO_USAGE_CACHE_SCHEMA_VERSION: i64 = 1;
 pub const CODEX_USAGE_LOCK_STALE_AFTER_SECONDS: u64 = 300;
@@ -968,6 +968,7 @@ pub fn codex_usage_widget_text(options: CodexUsageWidgetOptions<'_>) -> Result<S
         options.max_age_seconds,
         options.error_backoff_seconds,
         options.timeout,
+        options.display,
     )?;
     Ok(render_codex_usage_widget_from_cache(
         options.cache_path,
@@ -986,6 +987,7 @@ pub fn codex_usage_widget_body_text(
         options.max_age_seconds,
         options.error_backoff_seconds,
         options.timeout,
+        options.display,
     )?;
     Ok(render_codex_usage_widget_body_from_cache(
         options.cache_path,
@@ -1144,10 +1146,13 @@ pub fn render_codex_usage_widget_from_cache(
     read_codex_usage_shared_cache_value(path)
         .and_then(|cache| cache.get("codex").cloned())
         .map(|entry| {
-            render_codex_usage_status_widget_for_periods(
-                &windowed_usage_facts_from_cache_entry(&entry),
-                display,
-                periods,
+            render_agent_usage_status_widget(
+                codex_cache_status_label(&entry),
+                &render_codex_usage_summary_for_periods(
+                    &windowed_usage_facts_from_cache_entry(&entry),
+                    display,
+                    periods,
+                ),
             )
         })
         .unwrap_or_default()
@@ -1161,13 +1166,23 @@ pub fn render_codex_usage_widget_body_from_cache(
     read_codex_usage_shared_cache_value(path)
         .and_then(|cache| cache.get("codex").cloned())
         .map(|entry| {
-            render_codex_usage_status_body_for_periods(
-                &windowed_usage_facts_from_cache_entry(&entry),
-                display,
-                periods,
+            render_agent_usage_status_body(
+                codex_cache_status_label(&entry),
+                &render_codex_usage_summary_for_periods(
+                    &windowed_usage_facts_from_cache_entry(&entry),
+                    display,
+                    periods,
+                ),
             )
         })
         .unwrap_or_default()
+}
+
+fn codex_cache_status_label(entry: &serde_json::Value) -> &'static str {
+    match entry.get("status").and_then(serde_json::Value::as_str) {
+        Some("ok") => "codex",
+        _ => "codex~",
+    }
 }
 
 pub fn read_codex_usage_shared_cache_value(path: &std::path::Path) -> Option<serde_json::Value> {
@@ -1267,28 +1282,28 @@ pub fn refresh_codex_usage_shared_cache(
     max_age_seconds: u64,
     error_backoff_seconds: u64,
     timeout: std::time::Duration,
+    display: AgentUsageDisplay,
 ) -> Result<bool, String> {
-    if codex_usage_shared_cache_is_fresh(shared_path, now, max_age_seconds)
+    if codex_usage_shared_cache_is_fresh(shared_path, now, max_age_seconds, display)
         || codex_usage_shared_cache_is_backing_off(shared_path, now)
     {
         return Ok(false);
     }
-    let Some(_lock) = try_acquire_codex_usage_cache_lock(shared_path, now)? else {
+    let Some(lock) = try_acquire_codex_usage_cache_lock(shared_path, now)? else {
         return Ok(false);
     };
-    if codex_usage_shared_cache_is_fresh(shared_path, now, max_age_seconds)
+    if codex_usage_shared_cache_is_fresh(shared_path, now, max_age_seconds, display)
         || codex_usage_shared_cache_is_backing_off(shared_path, now)
     {
         return Ok(false);
     }
 
-    let quota_backoff_until = codex_usage_quota_backoff_until(shared_path, now);
     let previous_facts = read_codex_usage_shared_cache_value(shared_path)
         .and_then(|cache| cache.get("codex").cloned())
         .map(|entry| windowed_usage_facts_from_cache_entry(&entry));
-    let mut facts = collect_codex_usage_facts(path_var, timeout, quota_backoff_until.is_none());
-    let refresh_incomplete = !codex_usage_facts_are_complete(&facts);
-    if quota_backoff_until.is_some() || !facts.has_quota() {
+    let mut facts = collect_codex_usage_facts(path_var, timeout, display, &lock.path);
+    let refresh_incomplete = !codex_usage_facts_are_complete(&facts, display);
+    if !facts.has_quota() {
         preserve_previous_codex_window_quota(&mut facts, previous_facts.as_ref(), now);
     }
     preserve_previous_codex_window_tokens(&mut facts, previous_facts.as_ref());
@@ -1336,17 +1351,6 @@ pub fn refresh_codex_usage_shared_cache(
     if refresh_incomplete {
         entry.insert(
             "backoff_until_unix_seconds".to_string(),
-            serde_json::json!(now.saturating_add(error_backoff_seconds)),
-        );
-    }
-    if let Some(backoff_until) = quota_backoff_until {
-        entry.insert(
-            "quota_backoff_until_unix_seconds".to_string(),
-            serde_json::json!(backoff_until),
-        );
-    } else if facts.has_tokens() && !facts.has_quota() {
-        entry.insert(
-            "quota_backoff_until_unix_seconds".to_string(),
             serde_json::json!(now.saturating_add(error_backoff_seconds)),
         );
     }
@@ -2208,6 +2212,7 @@ pub fn codex_usage_shared_cache_is_fresh(
     path: &std::path::Path,
     now: u64,
     max_age_seconds: u64,
+    display: AgentUsageDisplay,
 ) -> bool {
     let Some(cache) = read_codex_usage_shared_cache_value(path) else {
         return false;
@@ -2221,7 +2226,7 @@ pub fn codex_usage_shared_cache_is_fresh(
                 && cache
                     .get("codex")
                     .map(windowed_usage_facts_from_cache_entry)
-                    .is_some_and(|facts| codex_usage_facts_are_complete(&facts))
+                    .is_some_and(|facts| codex_usage_facts_are_complete(&facts, display))
         })
 }
 
@@ -2302,17 +2307,6 @@ pub fn opencode_go_usage_shared_cache_is_backing_off(path: &std::path::Path, now
         .is_some_and(|backoff_until| now < backoff_until)
 }
 
-pub fn codex_usage_quota_backoff_until(path: &std::path::Path, now: u64) -> Option<u64> {
-    read_codex_usage_shared_cache_value(path)
-        .and_then(|cache| {
-            cache
-                .get("codex")?
-                .get("quota_backoff_until_unix_seconds")?
-                .as_u64()
-        })
-        .filter(|backoff_until| now < *backoff_until)
-}
-
 pub fn claude_usage_quota_backoff_until(path: &std::path::Path, now: u64) -> Option<u64> {
     read_claude_usage_shared_cache_value(path)
         .and_then(|cache| {
@@ -2324,10 +2318,12 @@ pub fn claude_usage_quota_backoff_until(path: &std::path::Path, now: u64) -> Opt
         .filter(|backoff_until| now < *backoff_until)
 }
 
-fn codex_usage_facts_are_complete(facts: &WindowedAgentUsageFacts) -> bool {
-    facts.five_hour_tokens.is_some()
-        && facts.weekly_tokens.is_some()
-        && facts.has_quota()
+fn codex_usage_facts_are_complete(
+    facts: &WindowedAgentUsageFacts,
+    display: AgentUsageDisplay,
+) -> bool {
+    let tokens_complete = facts.five_hour_tokens.is_some() && facts.weekly_tokens.is_some();
+    let quota_complete = facts.has_quota()
         && codex_quota_window_is_complete(
             facts.five_hour_remaining_percent,
             facts.five_hour_reset_at_unix_seconds,
@@ -2337,7 +2333,12 @@ fn codex_usage_facts_are_complete(facts: &WindowedAgentUsageFacts) -> bool {
             facts.weekly_remaining_percent,
             facts.weekly_reset_at_unix_seconds,
             facts.weekly_window_seconds,
-        )
+        );
+    match display {
+        AgentUsageDisplay::Both => tokens_complete && quota_complete,
+        AgentUsageDisplay::Token => tokens_complete,
+        AgentUsageDisplay::Quota => quota_complete,
+    }
 }
 
 fn codex_quota_window_is_complete(
@@ -2462,7 +2463,7 @@ fn preserve_previous_codex_window_tokens(
     let Some(previous) = previous else {
         return;
     };
-    if !codex_usage_facts_are_complete(previous) {
+    if !codex_usage_facts_are_complete(previous, AgentUsageDisplay::Token) {
         return;
     }
     if facts.five_hour_tokens.is_none()
@@ -2558,7 +2559,8 @@ fn tokenusage_window_identity_matches(
 fn collect_codex_usage_facts(
     path_var: Option<&std::ffi::OsStr>,
     timeout: std::time::Duration,
-    include_quota: bool,
+    display: AgentUsageDisplay,
+    empty_source: &std::path::Path,
 ) -> WindowedAgentUsageFacts {
     let started = std::time::Instant::now();
     let Some(path_var) = path_var else {
@@ -2575,36 +2577,42 @@ fn collect_codex_usage_facts(
     };
 
     let mut facts = WindowedAgentUsageFacts::default();
-    match run_tokenusage_json_command_with_budget(
-        &binary_path,
-        CODEX_ACTIVE_BLOCK_ARGS,
-        started,
-        timeout,
-    ) {
-        Ok(Some(value)) => {
-            facts.five_hour_tokens = tokenusage_active_block_tokens_from_json(&value)
-        }
-        Ok(None) => facts.error = Some("active block unavailable".to_string()),
-        Err(error) => facts.error = Some(error),
-    }
-    match run_tokenusage_json_command_with_budget(&binary_path, CODEX_WEEKLY_ARGS, started, timeout)
-    {
-        Ok(Some(value)) => facts.weekly_tokens = tokenusage_weekly_tokens_from_json(&value),
-        Ok(None) => {
-            if facts.error.is_none() {
-                facts.error = Some("weekly usage unavailable".to_string());
-            }
-        }
-        Err(error) => {
-            if facts.error.is_none() {
-                facts.error = Some(error);
-            }
-        }
-    }
-    if include_quota {
+    if matches!(display, AgentUsageDisplay::Token | AgentUsageDisplay::Both) {
         match run_tokenusage_json_command_with_budget(
             &binary_path,
-            CODEX_OFFICIAL_LIMITS_ARGS,
+            CODEX_ACTIVE_BLOCK_ARGS,
+            started,
+            timeout,
+        ) {
+            Ok(Some(value)) => {
+                facts.five_hour_tokens = tokenusage_active_block_tokens_from_json(&value)
+            }
+            Ok(None) => facts.error = Some("active block unavailable".to_string()),
+            Err(error) => facts.error = Some(error),
+        }
+        match run_tokenusage_json_command_with_budget(
+            &binary_path,
+            CODEX_WEEKLY_ARGS,
+            started,
+            timeout,
+        ) {
+            Ok(Some(value)) => facts.weekly_tokens = tokenusage_weekly_tokens_from_json(&value),
+            Ok(None) => {
+                if facts.error.is_none() {
+                    facts.error = Some("weekly usage unavailable".to_string());
+                }
+            }
+            Err(error) => {
+                if facts.error.is_none() {
+                    facts.error = Some(error);
+                }
+            }
+        }
+    }
+    if matches!(display, AgentUsageDisplay::Quota | AgentUsageDisplay::Both) {
+        match run_codex_official_limits_json_command_with_budget(
+            &binary_path,
+            empty_source,
             started,
             timeout,
         ) {
@@ -2997,19 +3005,7 @@ fn run_tokenusage_json_command(
                 binary_path.display()
             )
         })?;
-    let Some(output) = output else {
-        return Ok(None);
-    };
-    if !output.status.success() {
-        return Ok(None);
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let Some(json_raw) = extract_json_object(&stdout) else {
-        return Ok(None);
-    };
-    serde_json::from_str::<serde_json::Value>(json_raw)
-        .map(Some)
-        .map_err(|error| error.to_string())
+    parse_tokenusage_json_output(output)
 }
 
 fn run_tokenusage_json_command_with_budget(
@@ -3023,6 +3019,33 @@ fn run_tokenusage_json_command_with_budget(
         return Ok(None);
     }
     run_tokenusage_json_command(binary_path, args, remaining)
+}
+
+fn run_codex_official_limits_json_command_with_budget(
+    binary_path: &std::path::Path,
+    empty_source: &std::path::Path,
+    started: std::time::Instant,
+    timeout: std::time::Duration,
+) -> Result<Option<serde_json::Value>, String> {
+    let remaining = timeout.saturating_sub(started.elapsed());
+    if remaining.is_zero() {
+        return Ok(None);
+    }
+    let mut command = std::process::Command::new(binary_path);
+    command
+        .args(CODEX_OFFICIAL_LIMITS_ARGS)
+        .arg("--codex-sessions-dir")
+        .arg(empty_source)
+        .arg("--no-incremental-cache")
+        .env("RAYON_NUM_THREADS", "1")
+        .env("TOKIO_WORKER_THREADS", "1");
+    let output = run_command_with_timeout(command, remaining).map_err(|error| {
+        format!(
+            "failed to run tokenusage command {}: {error}",
+            binary_path.display()
+        )
+    })?;
+    parse_tokenusage_json_output(output)
 }
 
 fn run_tokenusage_command_with_timeout(
@@ -3041,6 +3064,13 @@ fn run_tokenusage_command_with_timeout(
             .env("RAYON_NUM_THREADS", worker_count)
             .env("TOKIO_WORKER_THREADS", worker_count);
     }
+    run_command_with_timeout(command, timeout)
+}
+
+fn run_command_with_timeout(
+    mut command: std::process::Command,
+    timeout: std::time::Duration,
+) -> std::io::Result<Option<std::process::Output>> {
     let mut child = command
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -3057,6 +3087,24 @@ fn run_tokenusage_command_with_timeout(
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
+}
+
+fn parse_tokenusage_json_output(
+    output: Option<std::process::Output>,
+) -> Result<Option<serde_json::Value>, String> {
+    let Some(output) = output else {
+        return Ok(None);
+    };
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let Some(json_raw) = extract_json_object(&stdout) else {
+        return Ok(None);
+    };
+    serde_json::from_str::<serde_json::Value>(json_raw)
+        .map(Some)
+        .map_err(|error| error.to_string())
 }
 
 fn find_command_in_path_var(
@@ -4291,48 +4339,44 @@ MemAvailable:   250000 kB
         );
     }
 
-    // Defends: the standalone Codex command owns tokenusage probing, cache writes, reset-window labels, and rendering without Yazelix runtime paths.
-    // Regression: window durations identify quota periods, and a weekly-only response replaces stale five-hour/secondary slots.
+    // Defends: quota display refreshes official Codex limits without discovering or caching local history.
+    // Regression: an unavailable or slow active-token block used to consume the whole refresh budget before quota was queried.
     // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
     #[cfg(unix)]
     #[test]
     fn codex_usage_widget_refreshes_shared_cache_from_tokenusage_provider() {
         let temp = temp_test_dir("codex_usage_refresh");
         let bin_dir = temp.join("bin");
+        let calls_path = bin_dir.join("calls");
         write_tokenusage_provider_script(
             &bin_dir,
             r#"#!/usr/bin/env sh
+printf '%s\n' "$*" >> "${0%/*}/calls"
 case " $* " in
 *" --official-limits "*)
   printf '%s\n' '{"official_codex":{"primary_used_percent":51.0,"secondary_used_percent":20.0,"primary_resets_at":8200,"primary_window_mins":300,"secondary_resets_at":260200,"secondary_window_mins":10080}}'
   ;;
 *)
-if [ "$1" = "blocks" ]; then
-  printf '%s\n' '{"blocks":[{"isActive":true,"totals":{"total_tokens":138456789}}]}'
-elif [ "$1" = "weekly" ]; then
-  printf '%s\n' '{"weekly":[{"totals":{"total_tokens":1337000000}}]}'
-else
-  exit 1
-fi
+exec sleep 10
   ;;
 esac
 "#,
         );
-        let cache_path = temp.join("agent_usage").join("codex_usage_cache_v2.json");
+        let cache_path = temp.join("agent_usage").join("codex_usage_cache_v4.json");
 
         let text = codex_usage_widget_text(CodexUsageWidgetOptions {
             cache_path: &cache_path,
             path_var: Some(bin_dir.as_os_str()),
             now_unix_seconds: 1_000,
-            max_age_seconds: 600,
-            error_backoff_seconds: 1_800,
-            timeout: std::time::Duration::from_secs(5),
-            display: AgentUsageDisplay::Both,
+            max_age_seconds: 60,
+            error_backoff_seconds: 120,
+            timeout: std::time::Duration::from_secs(1),
+            display: AgentUsageDisplay::Quota,
             periods: &[AgentUsagePeriod::FiveHour, AgentUsagePeriod::Weekly],
         })
         .unwrap();
 
-        assert_eq!(text, " [codex 3h/5h|138M|49% 4d/7d|1.34B|80%]");
+        assert_eq!(text, " [codex 3h/5h|49% 4d/7d|80%]");
         assert_eq!(
             read_codex_usage_shared_cache_value(&cache_path)
                 .unwrap()
@@ -4340,22 +4384,23 @@ esac
                 .and_then(serde_json::Value::as_str),
             Some("ok")
         );
+        let calls = std::fs::read_to_string(&calls_path).unwrap();
+        let calls = calls.lines().collect::<Vec<_>>();
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].contains(" --official-limits "));
+        assert!(calls[0].contains(" --codex-sessions-dir "));
+        assert!(calls[0].contains(" --no-incremental-cache"));
 
         write_tokenusage_provider_script(
             &bin_dir,
             r#"#!/usr/bin/env sh
+printf '%s\n' "$*" >> "${0%/*}/calls"
 case " $* " in
 *" --official-limits "*)
   printf '%s\n' '{"official_codex":{"primary_used_percent":1.0,"primary_resets_at":605800,"primary_window_mins":10080}}'
   ;;
 *)
-if [ "$1" = "blocks" ]; then
-  printf '%s\n' '{"blocks":[{"isActive":true,"totals":{"total_tokens":138456789}}]}'
-elif [ "$1" = "weekly" ]; then
-  printf '%s\n' '{"weekly":[{"totals":{"total_tokens":1337000000}}]}'
-else
-  exit 1
-fi
+exec sleep 10
   ;;
 esac
 "#,
@@ -4363,10 +4408,10 @@ esac
         let text = codex_usage_widget_text(CodexUsageWidgetOptions {
             cache_path: &cache_path,
             path_var: Some(bin_dir.as_os_str()),
-            now_unix_seconds: 2_000,
-            max_age_seconds: 0,
-            error_backoff_seconds: 1_800,
-            timeout: std::time::Duration::from_secs(5),
+            now_unix_seconds: 1_060,
+            max_age_seconds: 60,
+            error_backoff_seconds: 120,
+            timeout: std::time::Duration::from_secs(1),
             display: AgentUsageDisplay::Quota,
             periods: &[AgentUsagePeriod::FiveHour, AgentUsagePeriod::Weekly],
         })
@@ -4409,7 +4454,7 @@ else
 fi
 "#,
         );
-        let cache_path = temp.join("agent_usage").join("codex_usage_cache_v3.json");
+        let cache_path = temp.join("agent_usage").join("codex_usage_cache_v4.json");
         write_json_value_atomic(
             &cache_path,
             &serde_json::json!({
@@ -4445,7 +4490,7 @@ fi
         let text = render(1_000);
 
         assert!(started.elapsed() < std::time::Duration::from_secs(3));
-        assert_eq!(text, " [codex 5h|138M 4d/7d|1.34B|80%]");
+        assert_eq!(text, " [codex~ 5h|138M 4d/7d|1.34B|80%]");
         let cache = read_codex_usage_shared_cache_value(&cache_path).unwrap();
         let entry = &cache["codex"];
         assert_eq!(entry["status"].as_str(), Some("partial"));
@@ -4471,7 +4516,7 @@ fi
     #[test]
     fn codex_usage_shared_cache_respects_freshness_and_backoff() {
         let temp = temp_test_dir("codex_usage_backoff");
-        let cache_path = temp.join("codex_usage_cache_v2.json");
+        let cache_path = temp.join("codex_usage_cache_v4.json");
         write_json_value_atomic(
             &cache_path,
             &serde_json::json!({
@@ -4492,8 +4537,18 @@ fi
         )
         .unwrap();
 
-        assert!(codex_usage_shared_cache_is_fresh(&cache_path, 1_100, 600));
-        assert!(!codex_usage_shared_cache_is_fresh(&cache_path, 1_700, 600));
+        assert!(codex_usage_shared_cache_is_fresh(
+            &cache_path,
+            1_100,
+            600,
+            AgentUsageDisplay::Both
+        ));
+        assert!(!codex_usage_shared_cache_is_fresh(
+            &cache_path,
+            1_700,
+            600,
+            AgentUsageDisplay::Both
+        ));
 
         write_json_value_atomic(
             &cache_path,
@@ -4528,7 +4583,7 @@ fi
                 CODEX_USAGE_CACHE_SCHEMA_VERSION,
             ),
             Some(std::path::PathBuf::from(
-                "/state/sessions/agent_usage/codex_usage_cache_v3.json"
+                "/state/sessions/agent_usage/codex_usage_cache_v4.json"
             ))
         );
     }

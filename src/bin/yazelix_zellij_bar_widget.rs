@@ -4,6 +4,10 @@ use std::process;
 
 const SESSION_TERMINAL_ENV: &str = "YAZELIX_SESSION_TERMINAL";
 const UNKNOWN_SESSION_TERMINAL: &str = "unknown";
+const CODEX_QUOTA_MAX_AGE_SECONDS: u64 = 60;
+const CODEX_QUOTA_ERROR_BACKOFF_SECONDS: u64 = 120;
+const CODEX_HISTORY_MAX_AGE_SECONDS: u64 = 600;
+const CODEX_HISTORY_ERROR_BACKOFF_SECONDS: u64 = 1_800;
 
 fn main() {
     match run(env::args().skip(1).collect()) {
@@ -383,8 +387,8 @@ fn run_codex_usage(args: &[String]) -> Result<String, String> {
         yazelix_zellij_bar::AgentUsagePeriod::FiveHour,
         yazelix_zellij_bar::AgentUsagePeriod::Weekly,
     ];
-    let mut max_age_seconds = 600;
-    let mut error_backoff_seconds = 1_800;
+    let mut max_age_seconds = None;
+    let mut error_backoff_seconds = None;
     let mut timeout_ms = 5_000;
     let mut chrome = WidgetCommandChrome::default();
     let mut iter = args.iter();
@@ -412,10 +416,11 @@ fn run_codex_usage(args: &[String]) -> Result<String, String> {
                 )?;
             }
             "--max-age-seconds" => {
-                max_age_seconds = parse_u64_arg("--max-age-seconds", iter.next())?;
+                max_age_seconds = Some(parse_u64_arg("--max-age-seconds", iter.next())?);
             }
             "--error-backoff-seconds" => {
-                error_backoff_seconds = parse_u64_arg("--error-backoff-seconds", iter.next())?;
+                error_backoff_seconds =
+                    Some(parse_u64_arg("--error-backoff-seconds", iter.next())?);
             }
             "--timeout-ms" => {
                 timeout_ms = parse_u64_arg("--timeout-ms", iter.next())?.max(1);
@@ -427,17 +432,32 @@ fn run_codex_usage(args: &[String]) -> Result<String, String> {
     }
     let cache_path = cache_path
         .or_else(yazelix_zellij_bar::codex_usage_cache_path_from_env)
-        .or_else(|| default_cache_path("codex_usage_cache_v2.json"))
+        .or_else(|| {
+            default_cache_path(&format!(
+                "codex_usage_cache_v{}.json",
+                yazelix_zellij_bar::CODEX_USAGE_CACHE_SCHEMA_VERSION
+            ))
+        })
         .ok_or_else(|| {
             "codex usage: yazelix_zellij_bar_widget codex [--cache <path>] [--display quota|token|both] [--periods 5h,week]".to_string()
         })?;
     let path_var = env::var_os("PATH");
+    let (default_max_age, default_error_backoff) = match display {
+        yazelix_zellij_bar::AgentUsageDisplay::Quota => (
+            CODEX_QUOTA_MAX_AGE_SECONDS,
+            CODEX_QUOTA_ERROR_BACKOFF_SECONDS,
+        ),
+        _ => (
+            CODEX_HISTORY_MAX_AGE_SECONDS,
+            CODEX_HISTORY_ERROR_BACKOFF_SECONDS,
+        ),
+    };
     let options = yazelix_zellij_bar::CodexUsageWidgetOptions {
         cache_path: &cache_path,
         path_var: path_var.as_deref(),
         now_unix_seconds: unix_time_seconds(),
-        max_age_seconds,
-        error_backoff_seconds,
+        max_age_seconds: max_age_seconds.unwrap_or(default_max_age),
+        error_backoff_seconds: error_backoff_seconds.unwrap_or(default_error_backoff),
         timeout: std::time::Duration::from_millis(timeout_ms),
         display,
         periods: &periods,

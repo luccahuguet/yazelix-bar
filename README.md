@@ -131,6 +131,8 @@ Replace the `zjstatus.wasm` path with the installed package path. If you install
 
 Provider widgets maintain their own cache, lock, freshness, and error-backoff files under `$XDG_CACHE_HOME/yazelix_zellij_bar` or `$HOME/.cache/yazelix_zellij_bar`. CPU/RAM share one short-lived system-usage cache so command-widget bursts do not resample system metrics in every process. Use `--cache` only when overriding the default. Yazelix may omit it because the full runtime exports `YAZELIX_STATUS_BAR_CACHE_PATH`
 
+Codex quota display queries official limits once per minute without reading or updating local session history. A failed refresh waits two minutes; retained values use the `codex~` label until a refresh succeeds. Token and combined displays keep their 10-minute cache and 30-minute failure backoff because they still read local history
+
 ## Standalone Fact Renderers
 
 The Rust crate also exposes renderer helpers for embedders that want Yazelix-style widget text without a Yazelix runtime:
