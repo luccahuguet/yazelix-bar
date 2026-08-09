@@ -1,14 +1,16 @@
-# Yazelix Zellij Bar
+# Zellij Status Kit
 
-`yazelix-zellij-bar` is a standalone Zellij bar plugin package for users who want the Yazelix top-bar style without adopting the full Yazelix workspace
+`zellij-status-kit` is a standalone Zellij status-bar package for users who want
+the Yazelix top-bar style without adopting the full Yazelix workspace. Existing
+package, command, and artifact names remain stable.
 
 ## Install Shape
 
 The flake package is:
 
 ```bash
-nix build github:luccahuguet/yazelix-zellij-bar#yazelix_zellij_bar
-nix profile install github:luccahuguet/yazelix-zellij-bar#yazelix_zellij_bar
+nix build github:Yazelix/zellij-status-kit#yazelix_zellij_bar
+nix profile install github:Yazelix/zellij-status-kit#yazelix_zellij_bar
 ```
 
 The package installs:
