@@ -208,9 +208,8 @@ pub struct BarRenderData {
     pub custom_text_segment: String,
 }
 
-pub const YAZELIX_RUNTIME_BAR_RENDER_SCHEMA_VERSION: u64 = 3;
-const YAZELIX_RUNTIME_BAR_TEMPLATE: &str =
-    include_str!("../presets/yazelix_runtime_bar.template.kdl");
+pub const NOVA_RUNTIME_BAR_RENDER_SCHEMA_VERSION: u64 = 3;
+const NOVA_RUNTIME_BAR_TEMPLATE: &str = include_str!("../presets/nova_runtime_bar.template.kdl");
 const RUNTIME_PLACEHOLDER_PREFIX: &str = "__YAZELIX_RUNTIME_";
 const RUNTIME_ZJSTATUS_PLUGIN_URL_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_ZJSTATUS_PLUGIN_URL__";
 const RUNTIME_ACTIVE_THEME_FIELDS_PLACEHOLDER: &str = "__YAZELIX_RUNTIME_ACTIVE_THEME_FIELDS__";
@@ -251,7 +250,7 @@ const SYSTEM_USAGE_CACHE_REFRESH_GRACE_MILLIS: u64 = 30_000;
 const SYSTEM_USAGE_CACHE_LOCK_WAIT_PADDING_MILLIS: u64 = 50;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct YazelixRuntimeBarConfig {
+pub struct NovaRuntimeBarConfig {
     pub zjstatus_plugin_url: String,
     pub widget_tray: Vec<String>,
     #[serde(default = "default_widget_frame")]
@@ -267,7 +266,7 @@ pub struct YazelixRuntimeBarConfig {
     pub tab_label_mode: String,
     pub nu_bin: String,
     pub yzx_control_bin: String,
-    pub yazelix_zellij_bar_widget_bin: String,
+    pub nova_bar_widget_bin: String,
     pub runtime_dir: String,
     pub claude_usage_display: String,
     #[serde(default = "default_claude_usage_periods")]
@@ -281,7 +280,7 @@ pub struct YazelixRuntimeBarConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct YazelixRuntimeBarRender {
+pub struct NovaRuntimeBarRender {
     pub schema_version: u64,
     pub plugin_block: String,
 }
@@ -1545,7 +1544,7 @@ fn escape_kdl_string(value: &str) -> String {
 }
 
 fn runtime_theme_fields(
-    config: &YazelixRuntimeBarConfig,
+    config: &NovaRuntimeBarConfig,
     style: &BarStyle,
     chrome: WidgetChrome,
 ) -> Result<Vec<(&'static str, String)>, BarRenderError> {
@@ -1678,8 +1677,8 @@ fn render_zjstatus_bar_segments_with_style(
     })
 }
 
-pub fn render_yazelix_runtime_plugin_block(
-    config: &YazelixRuntimeBarConfig,
+pub fn render_nova_runtime_plugin_block(
+    config: &NovaRuntimeBarConfig,
 ) -> Result<String, BarRenderError> {
     let appearance_mode = runtime_bar_appearance(&config.appearance_mode);
     let chrome = WidgetChrome::parse(&config.widget_frame, &config.widget_separator)?;
@@ -1724,7 +1723,7 @@ pub fn render_yazelix_runtime_plugin_block(
         ),
         (
             RUNTIME_WIDGET_BIN_PLACEHOLDER,
-            escape_kdl_string(&config.yazelix_zellij_bar_widget_bin),
+            escape_kdl_string(&config.nova_bar_widget_bin),
         ),
         (
             RUNTIME_DIR_PLACEHOLDER,
@@ -1783,7 +1782,7 @@ pub fn render_yazelix_runtime_plugin_block(
             "{stdout}".to_string(),
         ),
     ];
-    let mut rendered = YAZELIX_RUNTIME_BAR_TEMPLATE.to_string();
+    let mut rendered = NOVA_RUNTIME_BAR_TEMPLATE.to_string();
     for (placeholder, value) in replacements {
         rendered = rendered.replace(placeholder, &value);
     }
@@ -2088,7 +2087,7 @@ fn default_system_usage_cache_path() -> Option<std::path::PathBuf> {
                 .map(|home| home.join(".cache"))
         })
         .map(|cache_dir| {
-            cache_dir.join("yazelix_zellij_bar").join(format!(
+            cache_dir.join("nova_bar").join(format!(
                 "system_usage_cache_v{SYSTEM_USAGE_CACHE_SCHEMA_VERSION}.json"
             ))
         })
@@ -3719,11 +3718,8 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "yazelix_zellij_bar_{name}_{}_{}",
-            std::process::id(),
-            unique
-        ));
+        let path =
+            std::env::temp_dir().join(format!("nova_bar_{name}_{}_{}", std::process::id(), unique));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         path
@@ -3874,8 +3870,8 @@ mod tests {
         );
     }
 
-    fn runtime_bar_config() -> YazelixRuntimeBarConfig {
-        YazelixRuntimeBarConfig {
+    fn runtime_bar_config() -> NovaRuntimeBarConfig {
+        NovaRuntimeBarConfig {
             zjstatus_plugin_url: "file:/runtime/share/zjstatus.wasm".to_string(),
             widget_tray: vec![
                 "session".to_string(),
@@ -3893,7 +3889,7 @@ mod tests {
             tab_label_mode: "compact".to_string(),
             nu_bin: "/runtime/bin/nu".to_string(),
             yzx_control_bin: "/runtime/bin/yzx_control".to_string(),
-            yazelix_zellij_bar_widget_bin: "/runtime/bin/yazelix_zellij_bar_widget".to_string(),
+            nova_bar_widget_bin: "/runtime/bin/nova_bar_widget".to_string(),
             runtime_dir: "/runtime".to_string(),
             claude_usage_display: "both".to_string(),
             claude_usage_periods: vec!["5h".to_string(), "week".to_string()],
@@ -3925,10 +3921,10 @@ mod tests {
     // Regression: integrated Yazelix KDL shape is owned by the child runtime template, not hardcoded in main or rebuilt as Rust string assembly.
     // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
     #[test]
-    fn renders_yazelix_runtime_plugin_block_from_template() {
-        let rendered = render_yazelix_runtime_plugin_block(&runtime_bar_config()).unwrap();
+    fn renders_nova_runtime_plugin_block_from_template() {
+        let rendered = render_nova_runtime_plugin_block(&runtime_bar_config()).unwrap();
 
-        assert!(YAZELIX_RUNTIME_BAR_TEMPLATE.contains(RUNTIME_ACTIVE_THEME_FIELDS_PLACEHOLDER));
+        assert!(NOVA_RUNTIME_BAR_TEMPLATE.contains(RUNTIME_ACTIVE_THEME_FIELDS_PLACEHOLDER));
         assert!(rendered.contains(r#"plugin location="file:/runtime/share/zjstatus.wasm" {"#));
         assert!(rendered.contains(r#"host_theme_mode "dark""#));
         assert!(rendered.contains(r##"host_theme_light_tab_normal "#[fg=#5c5f77] [{index}] ""##));
@@ -3952,17 +3948,14 @@ mod tests {
         assert!(rendered.contains(
             r##"pipe_workspace_format " #[fg=#6c7086,bold]• #[fg=#00ff88,bold]{output}""##
         ));
-        assert!(
-            rendered
-                .contains(r#"command_term_command "/runtime/bin/yazelix_zellij_bar_widget term""#)
-        );
+        assert!(rendered.contains(r#"command_term_command "/runtime/bin/nova_bar_widget term""#));
         assert!(rendered.contains(r##"command_term_format "{stdout}""##));
         assert!(rendered.contains(r##"command_term_rendermode "raw""##));
         assert!(!rendered.contains("command_yazelix_tabs_command"));
         assert!(!rendered.contains("command_workspace_command"));
         assert!(!rendered.contains("command_cursor"));
         assert!(rendered.contains(
-            r#"command_codex_usage_command "/runtime/bin/yazelix_zellij_bar_widget codex --display quota --periods 5h,week --widget-frame none --widget-separator empty --widget-first false""#
+            r#"command_codex_usage_command "/runtime/bin/nova_bar_widget codex --display quota --periods 5h,week --widget-frame none --widget-separator empty --widget-first false""#
         ));
         assert!(
             rendered
@@ -3971,7 +3964,7 @@ mod tests {
         assert!(rendered.contains(r##"command_codex_usage_format "{stdout}""##));
         assert!(rendered.contains(r##"command_codex_usage_rendermode "raw""##));
         assert!(rendered.contains(
-            r#"command_version_command "/runtime/bin/yazelix_zellij_bar_widget version --runtime-dir /runtime""#
+            r#"command_version_command "/runtime/bin/nova_bar_widget version --runtime-dir /runtime""#
         ));
         assert!(!rendered.contains(RUNTIME_PLACEHOLDER_PREFIX));
     }
@@ -3984,10 +3977,10 @@ mod tests {
         config.widget_frame = " square ".to_string();
         config.widget_separator = " pipe ".to_string();
 
-        let rendered = render_yazelix_runtime_plugin_block(&config).unwrap();
+        let rendered = render_nova_runtime_plugin_block(&config).unwrap();
 
         assert!(rendered.contains(
-            r#"command_cpu_command "/runtime/bin/yazelix_zellij_bar_widget cpu --widget-frame square --widget-separator empty --widget-first false""#
+            r#"command_cpu_command "/runtime/bin/nova_bar_widget cpu --widget-frame square --widget-separator empty --widget-first false""#
         ));
         assert!(rendered.contains(
             r##"pipe_workspace_format " #[fg=#6c7086,bold]| #[fg=#00ff88,bold][{output}]""##
@@ -4005,22 +3998,22 @@ mod tests {
     fn runtime_plugin_rejects_invalid_widget_chrome() {
         let mut config = runtime_bar_config();
         config.widget_frame = "curly".to_string();
-        let frame_error = render_yazelix_runtime_plugin_block(&config).unwrap_err();
+        let frame_error = render_nova_runtime_plugin_block(&config).unwrap_err();
         assert_eq!(frame_error.code(), "invalid_widget_frame");
 
         let mut config = runtime_bar_config();
         config.widget_separator = "comma".to_string();
-        let separator_error = render_yazelix_runtime_plugin_block(&config).unwrap_err();
+        let separator_error = render_nova_runtime_plugin_block(&config).unwrap_err();
         assert_eq!(separator_error.code(), "invalid_widget_separator");
     }
 
     // Defends: light appearance uses a purpose-built status-bar palette rather than dark-mode neon on a pale terminal.
     // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
     #[test]
-    fn renders_yazelix_runtime_plugin_block_with_light_palette() {
+    fn renders_nova_runtime_plugin_block_with_light_palette() {
         let mut config = runtime_bar_config();
         config.appearance_mode = "light".to_string();
-        let rendered = render_yazelix_runtime_plugin_block(&config).unwrap();
+        let rendered = render_nova_runtime_plugin_block(&config).unwrap();
 
         assert!(rendered.contains(r#"host_theme_mode "light""#));
         assert!(rendered.contains(r##"host_theme_dark_tab_normal "#[fg=#ffff00] [{index}] ""##));
@@ -4073,7 +4066,7 @@ mod tests {
             (APPEARANCE_MODE_LIGHT, &light_theme),
         ] {
             config.appearance_mode = mode.to_string();
-            let rendered = render_yazelix_runtime_plugin_block(&config).unwrap();
+            let rendered = render_nova_runtime_plugin_block(&config).unwrap();
 
             for (key, value) in active_theme {
                 assert_eq!(runtime_assignment(&rendered, key), escape_kdl_string(value));
@@ -4090,9 +4083,9 @@ mod tests {
     // Strength: defect=1 behavior=2 resilience=2 cost=1 uniqueness=2 total=8/10
     #[test]
     fn standalone_preset_keeps_runtime_template_separate() {
-        let standalone = include_str!("../presets/yazelix_zellij_bar.kdl");
+        let standalone = include_str!("../presets/nova_bar.kdl");
 
-        assert!(standalone.contains("__YAZELIX_ZELLIJ_BAR_ZJSTATUS_WASM__"));
+        assert!(standalone.contains("__NOVA_BAR_ZJSTATUS_WASM__"));
         assert!(!standalone.contains(RUNTIME_PLACEHOLDER_PREFIX));
         assert!(!standalone.contains("yzx_control"));
     }
@@ -4511,7 +4504,7 @@ fi
         let _ = std::fs::remove_dir_all(temp);
     }
 
-    // Defends: Codex cache freshness and error backoff are enforced by yazelix-zellij-bar, not by Yazelix wrappers.
+    // Defends: Codex cache freshness and error backoff are enforced by nova-bar, not by Yazelix wrappers.
     // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
     #[test]
     fn codex_usage_shared_cache_respects_freshness_and_backoff() {
@@ -4639,7 +4632,7 @@ esac
         let _ = std::fs::remove_dir_all(temp);
     }
 
-    // Defends: Claude cache freshness and error backoff are enforced by yazelix-zellij-bar, not by Yazelix wrappers.
+    // Defends: Claude cache freshness and error backoff are enforced by nova-bar, not by Yazelix wrappers.
     // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
     #[test]
     fn claude_usage_shared_cache_respects_freshness_and_backoff() {
@@ -4814,7 +4807,7 @@ esac
         let _ = std::fs::remove_dir_all(temp);
     }
 
-    // Defends: OpenCode Go cache freshness and error backoff are enforced by yazelix-zellij-bar, not by Yazelix wrappers.
+    // Defends: OpenCode Go cache freshness and error backoff are enforced by nova-bar, not by Yazelix wrappers.
     // Strength: defect=2 behavior=2 resilience=2 cost=1 uniqueness=2 total=9/10
     #[test]
     fn opencode_go_usage_shared_cache_respects_freshness_and_backoff() {

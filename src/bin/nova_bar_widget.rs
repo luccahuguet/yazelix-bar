@@ -22,7 +22,7 @@ fn main() {
 fn run(args: Vec<String>) -> Result<String, String> {
     let Some((command, rest)) = args.split_first() else {
         return Err(
-            "expected command: claude, codex, cpu, opencode_go, ram, tabs, term, version, or render-yazelix-runtime"
+            "expected command: claude, codex, cpu, opencode_go, ram, tabs, term, version, or render-nova-runtime"
                 .to_string(),
         );
     };
@@ -30,7 +30,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
         "claude" => run_claude_usage(rest),
         "codex" => run_codex_usage(rest),
         "opencode_go" => run_opencode_go_usage(rest),
-        "render-yazelix-runtime" => run_render_yazelix_runtime(rest),
+        "render-nova-runtime" => run_render_nova_runtime(rest),
         "tabs" => run_tabs(rest),
         "version" => run_version(rest),
         "cpu" => run_cpu_usage(rest),
@@ -42,7 +42,7 @@ fn run(args: Vec<String>) -> Result<String, String> {
 
 fn run_term(args: &[String]) -> Result<String, String> {
     if !args.is_empty() {
-        return Err("term usage: yazelix_zellij_bar_widget term".to_string());
+        return Err("term usage: nova_bar_widget term".to_string());
     }
     Ok(render_term_from_env(|key| env::var(key).ok()))
 }
@@ -75,8 +75,7 @@ fn normalize_session_terminal_label(raw: &str) -> Option<String> {
 fn run_version(args: &[String]) -> Result<String, String> {
     let [flag, runtime_dir] = args else {
         return Err(
-            "version usage: yazelix_zellij_bar_widget version --runtime-dir <runtime-dir>"
-                .to_string(),
+            "version usage: nova_bar_widget version --runtime-dir <runtime-dir>".to_string(),
         );
     };
     if flag != "--runtime-dir" {
@@ -89,13 +88,13 @@ fn runtime_badge(runtime_dir: &Path) -> Result<String, String> {
     let identity_path = runtime_dir.join("runtime_identity.json");
     let raw = std::fs::read_to_string(&identity_path).map_err(|error| {
         format!(
-            "failed to read Yazelix runtime identity at {}: {error}",
+            "failed to read Nova runtime identity at {}: {error}",
             identity_path.display()
         )
     })?;
     let identity: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
         format!(
-            "failed to parse Yazelix runtime identity at {}: {error}",
+            "failed to parse Nova runtime identity at {}: {error}",
             identity_path.display()
         )
     })?;
@@ -106,7 +105,7 @@ fn runtime_badge(runtime_dir: &Path) -> Result<String, String> {
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| {
                 format!(
-                    "Yazelix runtime identity at {} is missing string field `{name}`",
+                    "Nova runtime identity at {} is missing string field `{name}`",
                     identity_path.display()
                 )
             })
@@ -116,7 +115,7 @@ fn runtime_badge(runtime_dir: &Path) -> Result<String, String> {
 
 fn runtime_badge_for_status_bar(version: &str, channel: &str) -> Result<String, String> {
     if !matches!(channel, "stable" | "main" | "edge") {
-        return Err(format!("unsupported Yazelix channel: {channel}"));
+        return Err(format!("unsupported Nova channel: {channel}"));
     }
     let channel = channel.to_ascii_uppercase();
     let compact_version = if version == "dev" {
@@ -145,33 +144,33 @@ fn runtime_badge_for_status_bar(version: &str, channel: &str) -> Result<String, 
     Ok(format!("{compact_version} {channel}"))
 }
 
-fn run_render_yazelix_runtime(args: &[String]) -> Result<String, String> {
+fn run_render_nova_runtime(args: &[String]) -> Result<String, String> {
     let [flag, raw_request] = args else {
         return Err(
-            "render-yazelix-runtime usage: yazelix_zellij_bar_widget render-yazelix-runtime --json <request-json>"
+            "render-nova-runtime usage: nova_bar_widget render-nova-runtime --json <request-json>"
                 .to_string(),
         );
     };
     if flag != "--json" {
-        return Err("render-yazelix-runtime expects --json <request-json>".to_string());
+        return Err("render-nova-runtime expects --json <request-json>".to_string());
     }
 
-    let config: yazelix_zellij_bar::YazelixRuntimeBarConfig = serde_json::from_str(raw_request)
+    let config: nova_bar::NovaRuntimeBarConfig = serde_json::from_str(raw_request)
         .map_err(|error| format!("invalid runtime bar config json: {error}"))?;
-    let plugin_block = yazelix_zellij_bar::render_yazelix_runtime_plugin_block(&config)
-        .map_err(|error| format!("failed to render Yazelix runtime bar: {}", error.code()))?;
+    let plugin_block = nova_bar::render_nova_runtime_plugin_block(&config)
+        .map_err(|error| format!("failed to render Nova runtime bar: {}", error.code()))?;
 
-    serde_json::to_string(&yazelix_zellij_bar::YazelixRuntimeBarRender {
-        schema_version: yazelix_zellij_bar::YAZELIX_RUNTIME_BAR_RENDER_SCHEMA_VERSION,
+    serde_json::to_string(&nova_bar::NovaRuntimeBarRender {
+        schema_version: nova_bar::NOVA_RUNTIME_BAR_RENDER_SCHEMA_VERSION,
         plugin_block,
     })
-    .map_err(|error| format!("failed to encode Yazelix runtime bar render: {error}"))
+    .map_err(|error| format!("failed to encode Nova runtime bar render: {error}"))
 }
 
 fn run_tabs(args: &[String]) -> Result<String, String> {
     let mut cache_path = env::var_os("YAZELIX_STATUS_BAR_CACHE_PATH").map(std::path::PathBuf::from);
-    let mut mode = yazelix_zellij_bar::TAB_LABEL_MODE_FULL.to_string();
-    let mut appearance = yazelix_zellij_bar::APPEARANCE_MODE_DARK.to_string();
+    let mut mode = nova_bar::TAB_LABEL_MODE_FULL.to_string();
+    let mut appearance = nova_bar::APPEARANCE_MODE_DARK.to_string();
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -218,14 +217,14 @@ fn run_tabs(args: &[String]) -> Result<String, String> {
         )
     })?;
     let include_names = match mode.as_str() {
-        yazelix_zellij_bar::TAB_LABEL_MODE_FULL => true,
-        yazelix_zellij_bar::TAB_LABEL_MODE_COMPACT => false,
+        nova_bar::TAB_LABEL_MODE_FULL => true,
+        nova_bar::TAB_LABEL_MODE_COMPACT => false,
         _ => return Err(format!("unsupported tabs mode: {mode}")),
     };
 
-    yazelix_zellij_bar::render_status_cache_tab_strip_widget(
+    nova_bar::render_status_cache_tab_strip_widget(
         &cache,
-        &yazelix_zellij_bar::StatusCacheTabStripRenderOptions {
+        &nova_bar::StatusCacheTabStripRenderOptions {
             include_names,
             appearance_mode: appearance,
             busy_frame: unix_time_seconds(),
@@ -245,8 +244,8 @@ struct WidgetCommandChrome {
 impl Default for WidgetCommandChrome {
     fn default() -> Self {
         Self {
-            frame: yazelix_zellij_bar::WIDGET_FRAME_NONE.to_string(),
-            separator: yazelix_zellij_bar::WIDGET_SEPARATOR_DOT.to_string(),
+            frame: nova_bar::WIDGET_FRAME_NONE.to_string(),
+            separator: nova_bar::WIDGET_SEPARATOR_DOT.to_string(),
             first: false,
             configured: false,
         }
@@ -297,7 +296,7 @@ fn render_widget_command_segment(
     if !chrome.configured() {
         return Ok(body);
     }
-    yazelix_zellij_bar::render_configured_widget_segment(
+    nova_bar::render_configured_widget_segment(
         &body,
         &chrome.frame,
         &chrome.separator,
@@ -308,10 +307,10 @@ fn render_widget_command_segment(
 
 fn run_claude_usage(args: &[String]) -> Result<String, String> {
     let mut cache_path = None;
-    let mut display = yazelix_zellij_bar::AgentUsageDisplay::Both;
+    let mut display = nova_bar::AgentUsageDisplay::Both;
     let mut periods = vec![
-        yazelix_zellij_bar::AgentUsagePeriod::FiveHour,
-        yazelix_zellij_bar::AgentUsagePeriod::Weekly,
+        nova_bar::AgentUsagePeriod::FiveHour,
+        nova_bar::AgentUsagePeriod::Weekly,
     ];
     let mut max_age_seconds = 600;
     let mut error_backoff_seconds = 1_800;
@@ -356,13 +355,13 @@ fn run_claude_usage(args: &[String]) -> Result<String, String> {
         }
     }
     let cache_path = cache_path
-        .or_else(yazelix_zellij_bar::claude_usage_cache_path_from_env)
+        .or_else(nova_bar::claude_usage_cache_path_from_env)
         .or_else(|| default_cache_path("claude_usage_cache_v1.json"))
         .ok_or_else(|| {
-            "claude usage: yazelix_zellij_bar_widget claude [--cache <path>] [--display quota|token|both] [--periods 5h,week]".to_string()
+            "claude usage: nova_bar_widget claude [--cache <path>] [--display quota|token|both] [--periods 5h,week]".to_string()
         })?;
     let path_var = env::var_os("PATH");
-    let options = yazelix_zellij_bar::ClaudeUsageWidgetOptions {
+    let options = nova_bar::ClaudeUsageWidgetOptions {
         cache_path: &cache_path,
         path_var: path_var.as_deref(),
         now_unix_seconds: unix_time_seconds(),
@@ -373,19 +372,19 @@ fn run_claude_usage(args: &[String]) -> Result<String, String> {
         periods: &periods,
     };
     let text = if chrome.configured() {
-        yazelix_zellij_bar::claude_usage_widget_body_text(options)?
+        nova_bar::claude_usage_widget_body_text(options)?
     } else {
-        yazelix_zellij_bar::claude_usage_widget_text(options)?
+        nova_bar::claude_usage_widget_text(options)?
     };
     render_widget_command_segment(text, &chrome)
 }
 
 fn run_codex_usage(args: &[String]) -> Result<String, String> {
     let mut cache_path = None;
-    let mut display = yazelix_zellij_bar::AgentUsageDisplay::Quota;
+    let mut display = nova_bar::AgentUsageDisplay::Quota;
     let mut periods = vec![
-        yazelix_zellij_bar::AgentUsagePeriod::FiveHour,
-        yazelix_zellij_bar::AgentUsagePeriod::Weekly,
+        nova_bar::AgentUsagePeriod::FiveHour,
+        nova_bar::AgentUsagePeriod::Weekly,
     ];
     let mut max_age_seconds = None;
     let mut error_backoff_seconds = None;
@@ -431,19 +430,19 @@ fn run_codex_usage(args: &[String]) -> Result<String, String> {
         }
     }
     let cache_path = cache_path
-        .or_else(yazelix_zellij_bar::codex_usage_cache_path_from_env)
+        .or_else(nova_bar::codex_usage_cache_path_from_env)
         .or_else(|| {
             default_cache_path(&format!(
                 "codex_usage_cache_v{}.json",
-                yazelix_zellij_bar::CODEX_USAGE_CACHE_SCHEMA_VERSION
+                nova_bar::CODEX_USAGE_CACHE_SCHEMA_VERSION
             ))
         })
         .ok_or_else(|| {
-            "codex usage: yazelix_zellij_bar_widget codex [--cache <path>] [--display quota|token|both] [--periods 5h,week]".to_string()
+            "codex usage: nova_bar_widget codex [--cache <path>] [--display quota|token|both] [--periods 5h,week]".to_string()
         })?;
     let path_var = env::var_os("PATH");
     let (default_max_age, default_error_backoff) = match display {
-        yazelix_zellij_bar::AgentUsageDisplay::Quota => (
+        nova_bar::AgentUsageDisplay::Quota => (
             CODEX_QUOTA_MAX_AGE_SECONDS,
             CODEX_QUOTA_ERROR_BACKOFF_SECONDS,
         ),
@@ -452,7 +451,7 @@ fn run_codex_usage(args: &[String]) -> Result<String, String> {
             CODEX_HISTORY_ERROR_BACKOFF_SECONDS,
         ),
     };
-    let options = yazelix_zellij_bar::CodexUsageWidgetOptions {
+    let options = nova_bar::CodexUsageWidgetOptions {
         cache_path: &cache_path,
         path_var: path_var.as_deref(),
         now_unix_seconds: unix_time_seconds(),
@@ -463,9 +462,9 @@ fn run_codex_usage(args: &[String]) -> Result<String, String> {
         periods: &periods,
     };
     let text = if chrome.configured() {
-        yazelix_zellij_bar::codex_usage_widget_body_text(options)?
+        nova_bar::codex_usage_widget_body_text(options)?
     } else {
-        yazelix_zellij_bar::codex_usage_widget_text(options)?
+        nova_bar::codex_usage_widget_text(options)?
     };
     render_widget_command_segment(text, &chrome)
 }
@@ -473,11 +472,11 @@ fn run_codex_usage(args: &[String]) -> Result<String, String> {
 fn run_opencode_go_usage(args: &[String]) -> Result<String, String> {
     let mut cache_path = None;
     let mut db_paths = Vec::new();
-    let mut display = yazelix_zellij_bar::AgentUsageDisplay::Both;
+    let mut display = nova_bar::AgentUsageDisplay::Both;
     let mut periods = vec![
-        yazelix_zellij_bar::AgentUsagePeriod::FiveHour,
-        yazelix_zellij_bar::AgentUsagePeriod::Weekly,
-        yazelix_zellij_bar::AgentUsagePeriod::Monthly,
+        nova_bar::AgentUsagePeriod::FiveHour,
+        nova_bar::AgentUsagePeriod::Weekly,
+        nova_bar::AgentUsagePeriod::Monthly,
     ];
     let mut max_age_seconds = 600;
     let mut error_backoff_seconds = 1_800;
@@ -524,15 +523,15 @@ fn run_opencode_go_usage(args: &[String]) -> Result<String, String> {
         }
     }
     let cache_path = cache_path
-        .or_else(yazelix_zellij_bar::opencode_go_usage_cache_path_from_env)
+        .or_else(nova_bar::opencode_go_usage_cache_path_from_env)
         .or_else(|| default_cache_path("opencode_go_usage_cache_v1.json"))
         .ok_or_else(|| {
-            "opencode_go usage: yazelix_zellij_bar_widget opencode_go [--cache <path>] [--db <path>] [--display quota|token|both] [--periods 5h,week,month]".to_string()
+            "opencode_go usage: nova_bar_widget opencode_go [--cache <path>] [--db <path>] [--display quota|token|both] [--periods 5h,week,month]".to_string()
         })?;
     if db_paths.is_empty() {
-        db_paths = yazelix_zellij_bar::opencode_db_candidates_from_env();
+        db_paths = nova_bar::opencode_db_candidates_from_env();
     }
-    let options = yazelix_zellij_bar::OpenCodeGoUsageWidgetOptions {
+    let options = nova_bar::OpenCodeGoUsageWidgetOptions {
         cache_path: &cache_path,
         db_paths: &db_paths,
         now_unix_seconds: unix_time_seconds(),
@@ -542,27 +541,19 @@ fn run_opencode_go_usage(args: &[String]) -> Result<String, String> {
         periods: &periods,
     };
     let text = if chrome.configured() {
-        yazelix_zellij_bar::opencode_go_usage_widget_body_text(options)?
+        nova_bar::opencode_go_usage_widget_body_text(options)?
     } else {
-        yazelix_zellij_bar::opencode_go_usage_widget_text(options)?
+        nova_bar::opencode_go_usage_widget_text(options)?
     };
     render_widget_command_segment(text, &chrome)
 }
 
 fn run_cpu_usage(args: &[String]) -> Result<String, String> {
-    run_system_usage_widget(
-        args,
-        "cpu",
-        yazelix_zellij_bar::current_cpu_usage_widget_text(),
-    )
+    run_system_usage_widget(args, "cpu", nova_bar::current_cpu_usage_widget_text())
 }
 
 fn run_ram_usage(args: &[String]) -> Result<String, String> {
-    run_system_usage_widget(
-        args,
-        "ram",
-        yazelix_zellij_bar::current_ram_usage_widget_text(),
-    )
+    run_system_usage_widget(args, "ram", nova_bar::current_ram_usage_widget_text())
 }
 
 fn run_system_usage_widget(args: &[String], label: &str, value: String) -> Result<String, String> {
@@ -582,18 +573,16 @@ fn run_system_usage_widget(args: &[String], label: &str, value: String) -> Resul
     render_widget_command_segment(body, &chrome)
 }
 
-fn parse_agent_usage_display(raw: &str) -> Result<yazelix_zellij_bar::AgentUsageDisplay, String> {
+fn parse_agent_usage_display(raw: &str) -> Result<nova_bar::AgentUsageDisplay, String> {
     match raw {
-        "both" => Ok(yazelix_zellij_bar::AgentUsageDisplay::Both),
-        "token" | "tokens" => Ok(yazelix_zellij_bar::AgentUsageDisplay::Token),
-        "quota" => Ok(yazelix_zellij_bar::AgentUsageDisplay::Quota),
+        "both" => Ok(nova_bar::AgentUsageDisplay::Both),
+        "token" | "tokens" => Ok(nova_bar::AgentUsageDisplay::Token),
+        "quota" => Ok(nova_bar::AgentUsageDisplay::Quota),
         _ => Err(format!("invalid display mode: {raw}")),
     }
 }
 
-fn parse_agent_usage_periods(
-    raw: &str,
-) -> Result<Vec<yazelix_zellij_bar::AgentUsagePeriod>, String> {
+fn parse_agent_usage_periods(raw: &str) -> Result<Vec<nova_bar::AgentUsagePeriod>, String> {
     let mut periods = Vec::new();
     for value in raw.split(',') {
         let value = value.trim();
@@ -611,11 +600,11 @@ fn parse_agent_usage_periods(
     Ok(periods)
 }
 
-fn parse_agent_usage_period(raw: &str) -> Result<yazelix_zellij_bar::AgentUsagePeriod, String> {
+fn parse_agent_usage_period(raw: &str) -> Result<nova_bar::AgentUsagePeriod, String> {
     match raw {
-        "5h" | "five_hour" | "five-hour" => Ok(yazelix_zellij_bar::AgentUsagePeriod::FiveHour),
-        "week" | "weekly" | "wk" => Ok(yazelix_zellij_bar::AgentUsagePeriod::Weekly),
-        "month" | "monthly" | "mo" => Ok(yazelix_zellij_bar::AgentUsagePeriod::Monthly),
+        "5h" | "five_hour" | "five-hour" => Ok(nova_bar::AgentUsagePeriod::FiveHour),
+        "week" | "weekly" | "wk" => Ok(nova_bar::AgentUsagePeriod::Weekly),
+        "month" | "monthly" | "mo" => Ok(nova_bar::AgentUsagePeriod::Monthly),
         _ => Err(format!("invalid usage period: {raw}")),
     }
 }
@@ -644,8 +633,7 @@ fn unix_time_seconds() -> u64 {
 }
 
 fn default_cache_path(file_name: &str) -> Option<std::path::PathBuf> {
-    xdg_base_path("XDG_CACHE_HOME", ".cache")
-        .map(|base| base.join("yazelix_zellij_bar").join(file_name))
+    xdg_base_path("XDG_CACHE_HOME", ".cache").map(|base| base.join("nova_bar").join(file_name))
 }
 
 fn xdg_base_path(env_name: &str, home_fallback: &str) -> Option<std::path::PathBuf> {
@@ -666,9 +654,9 @@ mod tests {
 
     // Defends: integrated Yazelix status-bar rendering is owned by this child command surface, not copied into the main repo.
     #[test]
-    fn render_yazelix_runtime_outputs_layout_fragments() {
+    fn render_nova_runtime_outputs_layout_fragments() {
         let output = run(vec![
-            "render-yazelix-runtime".into(),
+            "render-nova-runtime".into(),
             "--json".into(),
             serde_json::json!({
                 "widget_tray": ["editor", "workspace", "cpu"],
@@ -680,7 +668,7 @@ mod tests {
                 "tab_label_mode": "compact",
                 "nu_bin": "/runtime/libexec/nu",
                 "yzx_control_bin": "/runtime/libexec/yzx_control",
-                "yazelix_zellij_bar_widget_bin": "/runtime/libexec/yazelix_zellij_bar_widget",
+                "nova_bar_widget_bin": "/runtime/libexec/nova_bar_widget",
                 "runtime_dir": "/runtime",
                 "claude_usage_display": "both",
                 "claude_usage_periods": ["5h", "week"],
@@ -720,10 +708,10 @@ mod tests {
         assert!(!plugin_block.contains("command_yazelix_tabs_command"));
         assert!(!plugin_block.contains("command_workspace_command"));
         assert!(plugin_block.contains(
-            "/runtime/libexec/yazelix_zellij_bar_widget codex --display quota --periods 5h,week --widget-frame none --widget-separator empty --widget-first false"
+            "/runtime/libexec/nova_bar_widget codex --display quota --periods 5h,week --widget-frame none --widget-separator empty --widget-first false"
         ));
         assert!(plugin_block.contains(
-            "/runtime/libexec/yazelix_zellij_bar_widget cpu --widget-frame none --widget-separator empty --widget-first false"
+            "/runtime/libexec/nova_bar_widget cpu --widget-frame none --widget-separator empty --widget-first false"
         ));
     }
 
@@ -801,13 +789,13 @@ mod tests {
     fn term_command_rejects_extra_args() {
         let error = run_term(&["extra".to_string()]).unwrap_err();
 
-        assert_eq!(error, "term usage: yazelix_zellij_bar_widget term");
+        assert_eq!(error, "term usage: nova_bar_widget term");
     }
 
     // Defends: the integrated tab-strip command reads the same window-local status cache as the existing bar widgets.
     #[test]
     fn tabs_command_renders_status_cache_activity_snapshot() {
-        let cache_dir = unique_test_dir("yazelix-zellij-bar-tabs-cache");
+        let cache_dir = unique_test_dir("nova-bar-tabs-cache");
         std::fs::create_dir_all(&cache_dir).unwrap();
         let cache_path = cache_dir.join("status_bar_cache.json");
         std::fs::write(
@@ -885,7 +873,7 @@ mod tests {
             (r#"{"version":"1.0.0"}"#, "missing string field `channel`"),
             (
                 r#"{"version":"1.0.0","channel":"preview"}"#,
-                "unsupported Yazelix channel: preview",
+                "unsupported Nova channel: preview",
             ),
             (
                 r#"{"version":"v-test","channel":"stable"}"#,
@@ -901,7 +889,7 @@ mod tests {
     }
 
     fn run_version_fixture(identity: &str) -> Result<String, String> {
-        let runtime_dir = unique_test_dir("yazelix-zellij-bar-version");
+        let runtime_dir = unique_test_dir("nova-bar-version");
         std::fs::create_dir_all(&runtime_dir).unwrap();
         std::fs::write(runtime_dir.join("runtime_identity.json"), identity).unwrap();
         let result = run(vec![

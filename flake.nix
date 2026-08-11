@@ -1,5 +1,5 @@
 {
-  description = "Standalone Zellij status-bar kit from Yazelix";
+  description = "Standalone Nova top bar for Zellij";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -41,7 +41,7 @@
             rustc = rustToolchain;
           };
           source = pkgs.lib.cleanSourceWith {
-            name = "yazelix-zellij-bar-source";
+            name = "nova-bar-source";
             src = ./.;
             filter =
               path: _type:
@@ -55,17 +55,17 @@
           };
         in
         rustPlatform.buildRustPackage {
-          pname = "yazelix_zellij_bar_tools";
+          pname = "nova_bar_tools";
           version = "0.1.0";
 
           src = source;
           cargoLock.lockFile = ./Cargo.lock;
 
           meta = {
-            description = "Standalone Zellij status-bar widget command from Yazelix";
-            homepage = "https://github.com/Yazelix/zellij-status-kit";
+            description = "Nova Bar widget command";
+            homepage = "https://github.com/Yazelix/nova-bar";
             license = pkgs.lib.licenses.asl20;
-            mainProgram = "yazelix_zellij_bar_widget";
+            mainProgram = "nova_bar_widget";
           };
         };
       barPackage =
@@ -75,10 +75,10 @@
           zjstatusPackage = zjstatus.packages.${system}.default;
         in
         pkgs.stdenvNoCC.mkDerivation {
-          pname = "yazelix_zellij_bar";
+          pname = "nova_bar";
           version = "0.1.0";
           src = pkgs.lib.cleanSourceWith {
-            name = "yazelix-zellij-bar-assets";
+            name = "nova-bar-assets";
             src = ./.;
             filter =
               path: _type:
@@ -97,14 +97,14 @@
           installPhase = ''
             runHook preInstall
 
-            install -Dm644 ${zjstatusPackage}/bin/zjstatus.wasm "$out/share/yazelix_zellij_bar/zjstatus.wasm"
-            substitute presets/yazelix_zellij_bar.kdl "$out/share/yazelix_zellij_bar/yazelix_zellij_bar.kdl" \
-              --replace-fail "__YAZELIX_ZELLIJ_BAR_ZJSTATUS_WASM__" "file:$out/share/yazelix_zellij_bar/zjstatus.wasm"
-            install -Dm644 presets/yazelix_zellij_bar.kdl "$out/share/yazelix_zellij_bar/yazelix_zellij_bar.template.kdl"
-            install -Dm644 presets/yazelix_runtime_bar.template.kdl "$out/share/yazelix_zellij_bar/yazelix_runtime_bar.template.kdl"
-            install -Dm755 ${tools}/bin/yazelix_zellij_bar_widget "$out/bin/yazelix_zellij_bar_widget"
-            cp -R presets/examples "$out/share/yazelix_zellij_bar/examples"
-            install -Dm644 README.md "$out/share/doc/yazelix_zellij_bar/README.md"
+            install -Dm644 ${zjstatusPackage}/bin/zjstatus.wasm "$out/share/nova_bar/zjstatus.wasm"
+            substitute presets/nova_bar.kdl "$out/share/nova_bar/nova_bar.kdl" \
+              --replace-fail "__NOVA_BAR_ZJSTATUS_WASM__" "file:$out/share/nova_bar/zjstatus.wasm"
+            install -Dm644 presets/nova_bar.kdl "$out/share/nova_bar/nova_bar.template.kdl"
+            install -Dm644 presets/nova_runtime_bar.template.kdl "$out/share/nova_bar/nova_runtime_bar.template.kdl"
+            install -Dm755 ${tools}/bin/nova_bar_widget "$out/bin/nova_bar_widget"
+            cp -R presets/examples "$out/share/nova_bar/examples"
+            install -Dm644 README.md "$out/share/doc/nova_bar/README.md"
 
             runHook postInstall
           '';
@@ -117,32 +117,32 @@
           installCheckPhase = ''
             runHook preInstallCheck
 
-            test -s "$out/share/yazelix_zellij_bar/zjstatus.wasm"
-            test -x "$out/bin/yazelix_zellij_bar_widget"
-            grep -q 'location="file:' "$out/share/yazelix_zellij_bar/yazelix_zellij_bar.kdl"
-            ! grep -q '__YAZELIX_ZELLIJ_BAR_ZJSTATUS_WASM__' "$out/share/yazelix_zellij_bar/yazelix_zellij_bar.kdl"
-            test -s "$out/share/yazelix_zellij_bar/yazelix_runtime_bar.template.kdl"
-            test -s "$out/share/yazelix_zellij_bar/examples/custom_command_widgets.kdl"
-            test -s "$out/share/yazelix_zellij_bar/examples/standalone_zellij_layout.kdl"
-            test -s "$out/share/yazelix_zellij_bar/examples/yazelix_runtime_widgets.kdl"
+            test -s "$out/share/nova_bar/zjstatus.wasm"
+            test -x "$out/bin/nova_bar_widget"
+            grep -q 'location="file:' "$out/share/nova_bar/nova_bar.kdl"
+            ! grep -q '__NOVA_BAR_ZJSTATUS_WASM__' "$out/share/nova_bar/nova_bar.kdl"
+            test -s "$out/share/nova_bar/nova_runtime_bar.template.kdl"
+            test -s "$out/share/nova_bar/examples/custom_command_widgets.kdl"
+            test -s "$out/share/nova_bar/examples/standalone_zellij_layout.kdl"
+            test -s "$out/share/nova_bar/examples/nova_runtime_widgets.kdl"
 
             runHook postInstallCheck
           '';
 
           passthru = {
-            presetPath = "share/yazelix_zellij_bar/yazelix_zellij_bar.kdl";
-            templatePath = "share/yazelix_zellij_bar/yazelix_zellij_bar.template.kdl";
-            runtimeTemplatePath = "share/yazelix_zellij_bar/yazelix_runtime_bar.template.kdl";
-            examplesPath = "share/yazelix_zellij_bar/examples";
-            widgetPath = "bin/yazelix_zellij_bar_widget";
-            wasmPath = "share/yazelix_zellij_bar/zjstatus.wasm";
+            presetPath = "share/nova_bar/nova_bar.kdl";
+            templatePath = "share/nova_bar/nova_bar.template.kdl";
+            runtimeTemplatePath = "share/nova_bar/nova_runtime_bar.template.kdl";
+            examplesPath = "share/nova_bar/examples";
+            widgetPath = "bin/nova_bar_widget";
+            wasmPath = "share/nova_bar/zjstatus.wasm";
           };
 
           meta = {
-            description = "Standalone Zellij bar plugin package from Yazelix";
-            homepage = "https://github.com/Yazelix/zellij-status-kit";
+            description = "Standalone Nova top bar for Zellij";
+            homepage = "https://github.com/Yazelix/nova-bar";
             license = pkgs.lib.licenses.asl20;
-            mainProgram = "yazelix_zellij_bar_widget";
+            mainProgram = "nova_bar_widget";
           };
         };
     in
@@ -156,26 +156,25 @@
         in
         {
           default = bar;
-          yazelix_zellij_bar = bar;
-          yazelix-zellij-bar = bar;
-          yazelix_zellij_bar_widget = tools;
+          nova_bar = bar;
+          nova_bar_widget = tools;
         }
       );
 
       apps = forAllSystems (system: {
         default = {
           type = "app";
-          program = "${self.packages.${system}.yazelix_zellij_bar_widget}/bin/yazelix_zellij_bar_widget";
+          program = "${self.packages.${system}.nova_bar_widget}/bin/nova_bar_widget";
         };
-        yazelix_zellij_bar_widget = {
+        nova_bar_widget = {
           type = "app";
-          program = "${self.packages.${system}.yazelix_zellij_bar_widget}/bin/yazelix_zellij_bar_widget";
+          program = "${self.packages.${system}.nova_bar_widget}/bin/nova_bar_widget";
         };
       });
 
       checks = forAllSystems (system: {
-        yazelix_zellij_bar = self.packages.${system}.yazelix_zellij_bar;
-        yazelix_zellij_bar_widget = self.packages.${system}.yazelix_zellij_bar_widget;
+        nova_bar = self.packages.${system}.nova_bar;
+        nova_bar_widget = self.packages.${system}.nova_bar_widget;
       });
     };
 }

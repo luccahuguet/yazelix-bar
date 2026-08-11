@@ -1,18 +1,18 @@
 [package]
-name = "yazelix_zellij_bar"
+name = "nova_bar"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.94"
-description = "Standalone Zellij status-bar kit from Yazelix"
+description = "Standalone Nova top bar for Zellij"
 license = "Apache-2.0"
-repository = "https://github.com/Yazelix/zellij-status-kit"
+repository = "https://github.com/Yazelix/nova-bar"
 readme = "README.md"
 keywords = ["zellij", "zjstatus", "terminal", "tui", "yazelix"]
 categories = ["command-line-utilities"]
 
 [[bin]]
-name = "yazelix_zellij_bar_widget"
-path = "src/bin/yazelix_zellij_bar_widget.rs"
+name = "nova_bar_widget"
+path = "src/bin/nova_bar_widget.rs"
 
 [dependencies]
 rusqlite = { version = "0.39.0", features = ["bundled"], optional = true }
