@@ -16,9 +16,6 @@ __YAZELIX_RUNTIME_HOST_THEME_PALETTES__
     tab_floating_indicator   "__YAZELIX_RUNTIME_FLOATING_INDICATOR__"
     tab_bell_indicator       ""
     tab_flashing_bell_indicator ""
-    tab_activity_pipe_name   "pipe_tab_activity"
-    tab_activity_busy_marker "·"
-    tab_activity_alert_marker "✓"
     tab_display_count "6"
 
     datetime_format "%H:%M %d/%m"

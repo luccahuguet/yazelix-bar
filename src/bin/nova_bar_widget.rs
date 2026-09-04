@@ -22,7 +22,7 @@ fn main() {
 fn run(args: Vec<String>) -> Result<String, String> {
     let Some((command, rest)) = args.split_first() else {
         return Err(
-            "expected command: claude, codex, cpu, opencode_go, ram, tabs, term, version, or render-nova-runtime"
+            "expected command: claude, codex, cpu, opencode_go, ram, term, version, or render-nova-runtime"
                 .to_string(),
         );
     };
@@ -31,7 +31,6 @@ fn run(args: Vec<String>) -> Result<String, String> {
         "codex" => run_codex_usage(rest),
         "opencode_go" => run_opencode_go_usage(rest),
         "render-nova-runtime" => run_render_nova_runtime(rest),
-        "tabs" => run_tabs(rest),
         "version" => run_version(rest),
         "cpu" => run_cpu_usage(rest),
         "ram" => run_ram_usage(rest),
@@ -165,72 +164,6 @@ fn run_render_nova_runtime(args: &[String]) -> Result<String, String> {
         plugin_block,
     })
     .map_err(|error| format!("failed to encode Nova runtime bar render: {error}"))
-}
-
-fn run_tabs(args: &[String]) -> Result<String, String> {
-    let mut cache_path = env::var_os("YAZELIX_STATUS_BAR_CACHE_PATH").map(std::path::PathBuf::from);
-    let mut mode = nova_bar::TAB_LABEL_MODE_FULL.to_string();
-    let mut appearance = nova_bar::APPEARANCE_MODE_DARK.to_string();
-
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        match arg.as_str() {
-            "--cache" => {
-                cache_path = Some(std::path::PathBuf::from(
-                    iter.next()
-                        .ok_or_else(|| "--cache requires a value".to_string())?,
-                ));
-            }
-            "--mode" => {
-                mode = iter
-                    .next()
-                    .ok_or_else(|| "--mode requires a value".to_string())?
-                    .to_string();
-            }
-            "--appearance" => {
-                appearance = iter
-                    .next()
-                    .ok_or_else(|| "--appearance requires a value".to_string())?
-                    .to_string();
-            }
-            other => return Err(format!("unknown tabs argument: {other}")),
-        }
-    }
-
-    let Some(cache_path) = cache_path else {
-        return Ok(String::new());
-    };
-    if !cache_path.is_file() {
-        return Ok(String::new());
-    }
-
-    let cache = std::fs::read_to_string(&cache_path).map_err(|error| {
-        format!(
-            "failed to read status-bar cache at {}: {error}",
-            cache_path.display()
-        )
-    })?;
-    let cache: serde_json::Value = serde_json::from_str(&cache).map_err(|error| {
-        format!(
-            "failed to parse status-bar cache at {}: {error}",
-            cache_path.display()
-        )
-    })?;
-    let include_names = match mode.as_str() {
-        nova_bar::TAB_LABEL_MODE_FULL => true,
-        nova_bar::TAB_LABEL_MODE_COMPACT => false,
-        _ => return Err(format!("unsupported tabs mode: {mode}")),
-    };
-
-    nova_bar::render_status_cache_tab_strip_widget(
-        &cache,
-        &nova_bar::StatusCacheTabStripRenderOptions {
-            include_names,
-            appearance_mode: appearance,
-            busy_frame: unix_time_seconds(),
-        },
-    )
-    .map_err(|error| format!("failed to render status-cache tabs: {}", error.code()))
 }
 
 #[derive(Debug, Clone)]
@@ -697,9 +630,7 @@ mod tests {
             r##"tab_normal_bell "#[fg=#ff0088,bold] [{index}] {sync_indicator}{fullscreen_indicator}""##
         ));
         assert!(plugin_block.contains(r##"tab_bell_indicator       """##));
-        assert!(plugin_block.contains(r##"tab_activity_pipe_name   "pipe_tab_activity""##));
-        assert!(plugin_block.contains(r##"tab_activity_busy_marker "·""##));
-        assert!(plugin_block.contains(r##"tab_activity_alert_marker "✓""##));
+        assert!(!plugin_block.contains("tab_activity"));
         assert!(plugin_block.contains(
             r##"pipe_workspace_format " #[fg=#6c7086,bold]• #[fg=#00ff88,bold]{output}""##
         ));
@@ -792,60 +723,6 @@ mod tests {
         assert_eq!(error, "term usage: nova_bar_widget term");
     }
 
-    // Defends: the integrated tab-strip command reads the same window-local status cache as the existing bar widgets.
-    #[test]
-    fn tabs_command_renders_status_cache_activity_snapshot() {
-        let cache_dir = unique_test_dir("nova-bar-tabs-cache");
-        std::fs::create_dir_all(&cache_dir).unwrap();
-        let cache_path = cache_dir.join("status_bar_cache.json");
-        std::fs::write(
-            &cache_path,
-            serde_json::json!({
-                "schema_version": 1,
-                "status_bus": {
-                    "schema_version": 1,
-                    "active_tab_position": 1
-                },
-                "tab_activity": {
-                    "schema_version": 1,
-                    "tabs": [
-                        {
-                            "tab_id": 10,
-                            "tab_position": 0,
-                            "base_name": "editor",
-                            "activity_state": "idle"
-                        },
-                        {
-                            "tab_id": 20,
-                            "tab_position": 1,
-                            "base_name": "agent",
-                            "activity_state": "alert"
-                        }
-                    ]
-                }
-            })
-            .to_string(),
-        )
-        .unwrap();
-
-        let output = run(vec![
-            "tabs".into(),
-            "--cache".into(),
-            cache_path.to_string_lossy().into_owned(),
-            "--mode".into(),
-            "compact".into(),
-            "--appearance".into(),
-            "dark".into(),
-        ])
-        .unwrap();
-
-        assert!(output.contains("#[fg=#ffff00][1]"));
-        assert!(output.contains("#[bg=#ff6600,fg=#000000,bold][2]"));
-        assert!(output.contains("#[bg=#ff0088,fg=#ffffff,bold][!]"));
-        assert!(!output.contains("agent"));
-        let _ = std::fs::remove_dir_all(cache_dir);
-    }
-
     // Defends: one packaged version/channel identity produces the complete, compact Nova badge.
     #[test]
     fn version_command_renders_packaged_channel_badges() {
@@ -854,6 +731,7 @@ mod tests {
             ("1.0.0-beta.4", "stable", "NOVA β4 STABLE"),
             ("1.0.0-beta.12", "main", "NOVA β12 MAIN"),
             ("1.0.0", "edge", "NOVA 1.0 EDGE"),
+            ("1.2.0", "edge", "NOVA 1.2 EDGE"),
         ] {
             assert_eq!(
                 run_version_fixture(&format!(

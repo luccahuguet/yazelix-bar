@@ -67,7 +67,7 @@ The optional provider widgets only need their own upstream facts:
 
 None of those widget commands require Nova runtime paths, `yzx_control`, or a Nova session cache.
 
-Nova keeps zjstatus `{tabs}` as the integrated tab strip so Zellij owns live tab identity, focus, click handling, and bell events. When the consumer supplies an activity-capable zjstatus input, `{tabs}` renders markers from `pipe_tab_activity` without changing native tab names. `nova_bar_widget tabs` is a renderer probe for Nova activity snapshots, not the default tab strip.
+Nova keeps zjstatus `{tabs}` as the integrated tab strip so Zellij owns live tab identity, focus, click handling, and bell events. Execution and agent activity are not rendered in tab labels; Nova's Radar sidebar owns that presentation.
 
 ## Optional Command Widgets
 
@@ -80,7 +80,7 @@ The main customization knobs are:
 - mode and tab format keys for labels and tab display
 - `command_*_command`, `command_*_format`, and `command_*_interval` for custom command widgets
 
-Generic zjstatus placeholders such as `{mode}`, `{tabs}`, `{session}`, and `{datetime}` work without Nova. The integrated Nova runtime additionally configures `tab_activity_pipe_name` for activity markers. To add a host/status command widget, start from:
+Generic zjstatus placeholders such as `{mode}`, `{tabs}`, `{session}`, and `{datetime}` work without Nova. To add a host/status command widget, start from:
 
 ```kdl
 format_right "#[fg=#ff0088,bold]{session} {datetime} {command_host} #[fg=#00ccff,bold]nova bar "
@@ -141,8 +141,6 @@ The Rust crate also exposes renderer helpers for embedders that want Nova-style 
 
 - `render_zjstatus_bar_segments` for editor, shell, terminal, custom text, and widget-tray placeholders
 - `render_zjstatus_tab_label_formats` for full and compact tab labels
-- `render_tab_activity_label` and `render_tab_activity_name` for plain `idle`, `busy`, or `alert` tab activity text
-- `render_native_tab_strip` and `render_status_cache_tab_strip_widget` for diagnostic or standalone tab text from all-tab activity facts
 - `render_nova_runtime_plugin_block` for the integrated Nova zjstatus plugin block from typed runtime config, `appearance_mode`, and the child-owned runtime KDL template
 - `render_codex_usage_status_widget` for cached Codex usage facts
 - `render_windowed_agent_usage_status_widget` for Claude, OpenCode Go, or another cached windowed provider
@@ -177,9 +175,9 @@ Workspace remains Nova-only because it is derived from Nova session facts and pu
 
 CPU, RAM, Codex, Claude, and OpenCode Go widgets are bar-owned standalone commands. Nova-only integration for those widgets is limited to generated layout wiring and default cache-path derivation from the full runtime.
 
-Nova consumes this child repo for integrated zjstatus plugin rendering and the standalone package. The child repo packages `zjstatus.wasm` from its pinned `zjstatus` flake input, so the package does not require manual artifact copying. The standalone pin supports native bell tab formatting. A consumer that configures `tab_activity_pipe_name` must override that input with the compatible activity extension; Nova does so with a narrow Yazelix `zjstatus` fork while keeping tab names in native Zellij state.
+Nova consumes this child repo for integrated zjstatus plugin rendering and the standalone package. The child repo packages `zjstatus.wasm` from its pinned `zjstatus` flake input, so the package does not require manual artifact copying. The standalone pin supports native bell tab formatting. Nova supplies a narrow Yazelix `zjstatus` fork for host-theme switching and separator-safe workspace pipes.
 
-`nova_bar_widget render-nova-runtime --json <config>` accepts typed runtime config from Nova and returns the complete child-owned zjstatus plugin block rendered from `nova_runtime_bar.template.kdl`. The runtime config includes `appearance_mode` so Nova Bar can own dark and light palettes. The integrated template uses zjstatus `{tabs}` for live Zellij tab state, terminal-bell styling, and pipe-fed Nova activity markers; the standalone `tabs` widget is a renderer probe for the activity snapshot contract, not the default tab strip. Nova core owns workspace facts, session config, pane-orchestrator activity snapshots, and runtime path resolution. This repo owns widget rendering, tab formatting, activity-label text, pipe and command-widget KDL, and the generic zjstatus plugin shape.
+`nova_bar_widget render-nova-runtime --json <config>` accepts typed runtime config from Nova and returns the complete child-owned zjstatus plugin block rendered from `nova_runtime_bar.template.kdl`. The runtime config includes `appearance_mode` so Nova Bar can own dark and light palettes. The integrated template uses zjstatus `{tabs}` for live Zellij tab state, terminal-bell styling, and native layout indicators. Nova core owns workspace facts, session config, and runtime path resolution. This repo owns widget rendering, tab formatting, pipe and command-widget KDL, and the generic zjstatus plugin shape.
 
 Nova makes this repo's `zjstatus` input follow its own pin. Standalone users get the pin recorded in this repo's `flake.lock`.
 
